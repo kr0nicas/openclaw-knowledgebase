@@ -33,8 +33,14 @@ crawl = [
     "beautifulsoup4>=4.12.0",
     "html2text>=2024.2.26",
 ]
+web = [
+    "fastapi>=0.109.0",
+    "uvicorn[standard]>=0.27.0",
+    "jinja2>=3.1.0",
+    "python-multipart>=0.0.6",
+]
 all = [
-    "openclaw-knowledgebase[docling,crawl]",
+    "openclaw-knowledgebase[docling,crawl,web]",
 ]
 dev = [
     "pytest>=8.0.0",

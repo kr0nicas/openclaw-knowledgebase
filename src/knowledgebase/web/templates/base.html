@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}OpenClaw Knowledgebase{% endblock %}</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        claw: {
+                            50: '#ecfeff',
+                            100: '#cffafe',
+                            200: '#a5f3fc',
+                            300: '#67e8f9',
+                            400: '#22d3ee',
+                            500: '#06b6d4',
+                            600: '#0891b2',
+                            700: '#0e7490',
+                            800: '#155e75',
+                            900: '#164e63',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <style>
+        /* Glassmorphism */
+        .glass {
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .glass-light {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        
+        /* Edge glow */
+        .edge-cyan { box-shadow: inset 0 2px 0 0 rgba(6, 182, 212, 0.5); }
+        .edge-purple { box-shadow: inset 0 2px 0 0 rgba(168, 85, 247, 0.5); }
+        .edge-green { box-shadow: inset 0 2px 0 0 rgba(34, 197, 94, 0.5); }
+        .edge-red { box-shadow: inset 0 2px 0 0 rgba(239, 68, 68, 0.5); }
+        
+        /* Animations */
+        .htmx-request .htmx-indicator {
+            display: inline-block;
+        }
+        .htmx-indicator {
+            display: none;
+        }
+        
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 20px rgba(6, 182, 212, 0.3); }
+            50% { box-shadow: 0 0 30px rgba(6, 182, 212, 0.5); }
+        }
+        .glow-pulse { animation: pulse-glow 2s ease-in-out infinite; }
+    </style>
+</head>
+<body class="h-full bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
+    <div class="min-h-full flex">
+        <!-- Sidebar -->
+        <aside class="w-64 glass border-r border-white/10 p-4 flex flex-col">
+            <!-- Logo -->
+            <div class="flex items-center gap-3 mb-8">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-400 to-cyan-600 flex items-center justify-center shadow-lg shadow-cyan-500/30">
+                    <i data-lucide="book-open" class="w-6 h-6 text-white"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg">Knowledgebase</h1>
+                    <p class="text-xs text-gray-400">OpenClaw</p>
+                </div>
+            </div>
+            
+            <!-- Navigation -->
+            <nav class="flex-1 space-y-2">
+                <a href="/" class="flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors
+                    {% if request.url.path == '/' %}bg-cyan-500/20 text-cyan-400{% else %}text-gray-300 hover:bg-white/5{% endif %}">
+                    <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
+                    Dashboard
+                </a>
+                <a href="/search" class="flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors
+                    {% if request.url.path == '/search' %}bg-cyan-500/20 text-cyan-400{% else %}text-gray-300 hover:bg-white/5{% endif %}">
+                    <i data-lucide="search" class="w-5 h-5"></i>
+                    Search
+                </a>
+                <a href="/sources" class="flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors
+                    {% if request.url.path == '/sources' %}bg-cyan-500/20 text-cyan-400{% else %}text-gray-300 hover:bg-white/5{% endif %}">
+                    <i data-lucide="database" class="w-5 h-5"></i>
+                    Sources
+                </a>
+                <a href="/settings" class="flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors
+                    {% if request.url.path == '/settings' %}bg-cyan-500/20 text-cyan-400{% else %}text-gray-300 hover:bg-white/5{% endif %}">
+                    <i data-lucide="settings" class="w-5 h-5"></i>
+                    Settings
+                </a>
+            </nav>
+            
+            <!-- Footer -->
+            <div class="pt-4 border-t border-white/10">
+                <div class="text-xs text-gray-500">
+                    v0.1.0 • <a href="https://github.com/f2daz/openclaw-knowledgebase" target="_blank" class="hover:text-cyan-400">GitHub</a>
+                </div>
+            </div>
+        </aside>
+        
+        <!-- Main Content -->
+        <main class="flex-1 overflow-auto">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+    
+    <script>
+        // Initialize Lucide icons
+        lucide.createIcons();
+        
+        // Re-initialize after HTMX swaps
+        document.body.addEventListener('htmx:afterSwap', function() {
+            lucide.createIcons();
+        });
+    </script>
+</body>
+</html>

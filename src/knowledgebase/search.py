@@ -34,6 +34,8 @@ def search(
             "title": c.title,
             "content": c.content,
             "similarity": c.similarity,
+            "chunk_number": c.chunk_number,
+            "source_type": "web",  # Default, could be enhanced
         }
         for c in chunks
     ]
@@ -65,6 +67,8 @@ def search_hybrid(
             "title": c.title,
             "content": c.content,
             "similarity": c.similarity,
+            "chunk_number": c.chunk_number,
+            "source_type": "web",
         }
         for c in chunks
     ]

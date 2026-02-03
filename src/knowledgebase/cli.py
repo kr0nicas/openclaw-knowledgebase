@@ -170,5 +170,28 @@ def sources():
     console.print(table)
 
 
+@main.command()
+@click.option("--host", default="0.0.0.0", help="Host to bind to")
+@click.option("--port", "-p", default=8080, help="Port to bind to")
+@click.option("--reload", is_flag=True, help="Enable auto-reload (dev)")
+def serve(host: str, port: int, reload: bool):
+    """Start the web UI server."""
+    try:
+        import uvicorn
+    except ImportError:
+        console.print("[red]❌ Web dependencies not installed.[/red]")
+        console.print("Install with: [cyan]pip install openclaw-knowledgebase[web][/cyan]")
+        sys.exit(1)
+    
+    console.print(f"\n🚀 Starting web UI at [cyan]http://{host}:{port}[/cyan]\n")
+    
+    uvicorn.run(
+        "knowledgebase.web.app:app",
+        host=host,
+        port=port,
+        reload=reload,
+    )
+
+
 if __name__ == "__main__":
     main()

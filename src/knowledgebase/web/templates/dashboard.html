@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - OpenClaw Knowledgebase{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold">Dashboard</h1>
+            <p class="text-gray-400 mt-1">Overview of your knowledge base</p>
+        </div>
+        
+        <!-- Quick Search -->
+        <div class="w-96">
+            <form action="/search" method="get" class="relative">
+                <input type="text" name="q" placeholder="Quick search..." 
+                    class="w-full px-4 py-2.5 pl-10 rounded-xl glass-light border border-white/10 
+                           focus:border-cyan-500/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20
+                           placeholder-gray-500 text-white">
+                <i data-lucide="search" class="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-4 gap-4">
+        <!-- Sources -->
+        <div class="glass rounded-xl p-4 edge-purple">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                    <i data-lucide="database" class="w-5 h-5 text-purple-400"></i>
+                </div>
+                <div>
+                    <p class="text-2xl font-bold">{{ stats.total_sources }}</p>
+                    <p class="text-sm text-gray-400">Sources</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Total Chunks -->
+        <div class="glass rounded-xl p-4 edge-cyan">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+                    <i data-lucide="file-text" class="w-5 h-5 text-cyan-400"></i>
+                </div>
+                <div>
+                    <p class="text-2xl font-bold">{{ stats.total_chunks }}</p>
+                    <p class="text-sm text-gray-400">Total Chunks</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- With Embeddings -->
+        <div class="glass rounded-xl p-4 edge-green">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
+                    <i data-lucide="check-circle" class="w-5 h-5 text-green-400"></i>
+                </div>
+                <div>
+                    <p class="text-2xl font-bold">{{ stats.chunks_with_embeddings }}</p>
+                    <p class="text-sm text-gray-400">With Embeddings</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Pending -->
+        <div class="glass rounded-xl p-4 {% if stats.chunks_without_embeddings > 0 %}edge-red{% else %}edge-green{% endif %}">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-lg {% if stats.chunks_without_embeddings > 0 %}bg-red-500/20{% else %}bg-green-500/20{% endif %} flex items-center justify-center">
+                    <i data-lucide="{% if stats.chunks_without_embeddings > 0 %}clock{% else %}check{% endif %}" 
+                       class="w-5 h-5 {% if stats.chunks_without_embeddings > 0 %}text-red-400{% else %}text-green-400{% endif %}"></i>
+                </div>
+                <div>
+                    <p class="text-2xl font-bold">{{ stats.chunks_without_embeddings }}</p>
+                    <p class="text-sm text-gray-400">Pending</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Connection Status -->
+    <div class="glass rounded-xl p-4">
+        <h2 class="font-semibold mb-3 flex items-center gap-2">
+            <i data-lucide="activity" class="w-5 h-5 text-cyan-400"></i>
+            System Status
+        </h2>
+        <div class="flex items-center gap-6">
+            <div class="flex items-center gap-2">
+                {% if ollama_ok %}
+                <span class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+                <span class="text-sm text-gray-300">Ollama Connected</span>
+                {% else %}
+                <span class="w-2 h-2 rounded-full bg-red-400"></span>
+                <span class="text-sm text-red-400">Ollama: {{ ollama_msg }}</span>
+                {% endif %}
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+                <span class="text-sm text-gray-300">Supabase Connected</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Recent Sources -->
+    <div class="glass rounded-xl p-4">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="font-semibold flex items-center gap-2">
+                <i data-lucide="folder-open" class="w-5 h-5 text-purple-400"></i>
+                Recent Sources
+            </h2>
+            <a href="/sources" class="text-sm text-cyan-400 hover:text-cyan-300 flex items-center gap-1">
+                View all <i data-lucide="arrow-right" class="w-4 h-4"></i>
+            </a>
+        </div>
+        
+        {% if sources %}
+        <div class="space-y-2">
+            {% for source in sources %}
+            <div class="glass-light rounded-lg p-3 flex items-center justify-between hover:bg-white/10 transition-colors">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-lg {% if source.source_type == 'web' %}bg-cyan-500/20{% else %}bg-purple-500/20{% endif %} flex items-center justify-center">
+                        <i data-lucide="{% if source.source_type == 'web' %}globe{% else %}file{% endif %}" 
+                           class="w-4 h-4 {% if source.source_type == 'web' %}text-cyan-400{% else %}text-purple-400{% endif %}"></i>
+                    </div>
+                    <div>
+                        <p class="font-medium">{{ source.title or 'Untitled' }}</p>
+                        <p class="text-xs text-gray-500 truncate max-w-md">{{ source.url }}</p>
+                    </div>
+                </div>
+                <span class="text-xs px-2 py-1 rounded-full {% if source.source_type == 'web' %}bg-cyan-500/20 text-cyan-400{% else %}bg-purple-500/20 text-purple-400{% endif %}">
+                    {{ source.source_type or 'web' }}
+                </span>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-gray-500 text-center py-8">No sources yet. Add your first source to get started!</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - OpenClaw Knowledgebase{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-6">
+    <!-- Header -->
+    <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-gray-400 to-gray-600 flex items-center justify-center shadow-lg">
+            <i data-lucide="settings" class="w-6 h-6 text-white"></i>
+        </div>
+        <div>
+            <h1 class="text-2xl font-bold">Settings</h1>
+            <p class="text-gray-400">Configuration and status</p>
+        </div>
+    </div>
+    
+    <!-- Connection Status -->
+    <div class="glass rounded-xl p-6">
+        <h2 class="font-semibold mb-4 flex items-center gap-2">
+            <i data-lucide="activity" class="w-5 h-5 text-cyan-400"></i>
+            Connection Status
+        </h2>
+        
+        <div class="space-y-4">
+            <!-- Ollama -->
+            <div class="flex items-center justify-between p-4 glass-light rounded-lg">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
+                        <i data-lucide="brain" class="w-5 h-5 text-orange-400"></i>
+                    </div>
+                    <div>
+                        <p class="font-medium">Ollama</p>
+                        <p class="text-sm text-gray-500">{{ config.ollama_url }}</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    {% if ollama_ok %}
+                    <span class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+                    <span class="text-sm text-green-400">Connected</span>
+                    {% else %}
+                    <span class="w-2 h-2 rounded-full bg-red-400"></span>
+                    <span class="text-sm text-red-400">{{ ollama_msg }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <!-- Supabase -->
+            <div class="flex items-center justify-between p-4 glass-light rounded-lg">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
+                        <i data-lucide="database" class="w-5 h-5 text-green-400"></i>
+                    </div>
+                    <div>
+                        <p class="font-medium">Supabase</p>
+                        <p class="text-sm text-gray-500">{{ config.supabase_url }}</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+                    <span class="text-sm text-green-400">Connected</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Current Configuration -->
+    <div class="glass rounded-xl p-6">
+        <h2 class="font-semibold mb-4 flex items-center gap-2">
+            <i data-lucide="code" class="w-5 h-5 text-purple-400"></i>
+            Configuration
+        </h2>
+        
+        <div class="grid grid-cols-2 gap-4">
+            <div class="p-4 glass-light rounded-lg">
+                <p class="text-sm text-gray-500 mb-1">Embedding Model</p>
+                <p class="font-mono text-cyan-400">{{ config.ollama_model }}</p>
+            </div>
+            
+            <div class="p-4 glass-light rounded-lg">
+                <p class="text-sm text-gray-500 mb-1">Embedding Dimensions</p>
+                <p class="font-mono text-cyan-400">{{ config.embedding_dim }}</p>
+            </div>
+            
+            <div class="p-4 glass-light rounded-lg">
+                <p class="text-sm text-gray-500 mb-1">Chunk Size</p>
+                <p class="font-mono text-cyan-400">{{ config.chunk_size }} characters</p>
+            </div>
+            
+            <div class="p-4 glass-light rounded-lg">
+                <p class="text-sm text-gray-500 mb-1">Chunk Overlap</p>
+                <p class="font-mono text-cyan-400">{{ config.chunk_overlap }} characters</p>
+            </div>
+            
+            <div class="p-4 glass-light rounded-lg">
+                <p class="text-sm text-gray-500 mb-1">Table Prefix</p>
+                <p class="font-mono text-cyan-400">{{ config.table_prefix }}</p>
+            </div>
+            
+            <div class="p-4 glass-light rounded-lg">
+                <p class="text-sm text-gray-500 mb-1">Debug Mode</p>
+                <p class="font-mono text-cyan-400">{{ 'Enabled' if config.debug else 'Disabled' }}</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Quick Reference -->
+    <div class="glass rounded-xl p-6">
+        <h2 class="font-semibold mb-4 flex items-center gap-2">
+            <i data-lucide="terminal" class="w-5 h-5 text-green-400"></i>
+            CLI Quick Reference
+        </h2>
+        
+        <div class="space-y-3 font-mono text-sm">
+            <div class="p-3 bg-black/30 rounded-lg">
+                <span class="text-gray-500"># Semantic search</span><br>
+                <span class="text-green-400">kb find</span> <span class="text-cyan-400">"your query here"</span>
+            </div>
+            
+            <div class="p-3 bg-black/30 rounded-lg">
+                <span class="text-gray-500"># Hybrid search (semantic + keyword)</span><br>
+                <span class="text-green-400">kb find</span> <span class="text-cyan-400">"your query"</span> <span class="text-purple-400">--hybrid</span>
+            </div>
+            
+            <div class="p-3 bg-black/30 rounded-lg">
+                <span class="text-gray-500"># Generate embeddings for new chunks</span><br>
+                <span class="text-green-400">kb embed</span> <span class="text-purple-400">--batch 50</span>
+            </div>
+            
+            <div class="p-3 bg-black/30 rounded-lg">
+                <span class="text-gray-500"># View stats</span><br>
+                <span class="text-green-400">kb status</span>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
