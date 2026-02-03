@@ -197,6 +197,70 @@ def create_app() -> FastAPI:
             "ollama": {"ok": ollama_ok, "message": ollama_msg},
         }
     
+    @app.get("/api/export/search")
+    async def api_export_search(
+        q: str = Query(...),
+        format: str = Query(default="json"),
+        hybrid: bool = Query(default=False),
+        limit: int = Query(default=50),
+        threshold: float = Query(default=0.5),
+    ):
+        """Export search results in various formats."""
+        from fastapi.responses import PlainTextResponse
+        
+        if hybrid:
+            results = search_hybrid(q, limit=limit)
+        else:
+            results = search(q, limit=limit, threshold=threshold)
+        
+        if format == "json":
+            return results
+        
+        elif format == "markdown":
+            lines = [f"# Search Results: {q}", "", f"Found {len(results)} results", ""]
+            for i, r in enumerate(results, 1):
+                sim = r.get("similarity", 0)
+                title = r.get("title") or "Untitled"
+                lines.append(f"## {i}. [{sim:.0%}] {title}")
+                if r.get("url"):
+                    lines.append(f"URL: {r['url']}")
+                lines.append("")
+                lines.append(r.get("content", "")[:500])
+                lines.append("")
+                lines.append("---")
+                lines.append("")
+            
+            return PlainTextResponse(
+                "\n".join(lines),
+                media_type="text/markdown",
+                headers={"Content-Disposition": f"attachment; filename=search-{q[:20]}.md"}
+            )
+        
+        elif format == "csv":
+            import csv
+            import io
+            
+            output = io.StringIO()
+            writer = csv.writer(output)
+            writer.writerow(["rank", "similarity", "title", "url", "content_preview"])
+            
+            for i, r in enumerate(results, 1):
+                writer.writerow([
+                    i,
+                    f"{r.get('similarity', 0):.2f}",
+                    r.get("title") or "",
+                    r.get("url") or "",
+                    r.get("content", "")[:200].replace("\n", " ")
+                ])
+            
+            return PlainTextResponse(
+                output.getvalue(),
+                media_type="text/csv",
+                headers={"Content-Disposition": f"attachment; filename=search-{q[:20]}.csv"}
+            )
+        
+        return {"error": "Unknown format. Use: json, markdown, csv"}
+    
     # --- Ingestion Endpoints ---
     
     @app.post("/api/crawl")

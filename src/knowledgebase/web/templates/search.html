@@ -82,6 +82,30 @@
         </form>
     </div>
     
+    <!-- Results Header -->
+    {% if query and results %}
+    <div class="flex items-center justify-between">
+        <p class="text-sm text-gray-400">{{ results|length }} results for "{{ query }}"</p>
+        
+        <!-- Export Buttons -->
+        <div class="flex items-center gap-2">
+            <span class="text-xs text-gray-500">Export:</span>
+            <a href="/api/export/search?q={{ query }}&format=json&limit=50&hybrid={{ hybrid }}" 
+               class="px-2 py-1 text-xs rounded bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white">
+                JSON
+            </a>
+            <a href="/api/export/search?q={{ query }}&format=markdown&limit=50&hybrid={{ hybrid }}" 
+               class="px-2 py-1 text-xs rounded bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white">
+                Markdown
+            </a>
+            <a href="/api/export/search?q={{ query }}&format=csv&limit=50&hybrid={{ hybrid }}" 
+               class="px-2 py-1 text-xs rounded bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white">
+                CSV
+            </a>
+        </div>
+    </div>
+    {% endif %}
+    
     <!-- Results -->
     <div id="results">
         {% if query %}
