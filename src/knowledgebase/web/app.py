@@ -277,7 +277,7 @@ def create_app() -> FastAPI:
         return list(_jobs.values())
     
     @app.delete("/api/sources/{source_id}")
-    async def api_delete_source(source_id: int):
+    async def api_delete_source(source_id: str):
         """Delete a source and its chunks."""
         kb = KnowledgeBase()
         # Delete chunks first
@@ -287,6 +287,45 @@ def create_app() -> FastAPI:
         if resp.status_code in (200, 204):
             return {"status": "deleted", "source_id": source_id}
         raise HTTPException(status_code=500, detail="Failed to delete source")
+    
+    @app.post("/api/sources/{source_id}/refresh")
+    async def api_refresh_source(source_id: str, background_tasks: BackgroundTasks):
+        """Refresh a source by re-crawling/re-processing."""
+        kb = KnowledgeBase()
+        
+        # Get source info
+        resp = kb._request("GET", kb._sources_table, params={"id": f"eq.{source_id}"})
+        if resp.status_code != 200 or not resp.json():
+            raise HTTPException(status_code=404, detail="Source not found")
+        
+        source_data = resp.json()[0]
+        url = source_data.get("url", "")
+        title = source_data.get("title")
+        source_type = source_data.get("source_type", "web")
+        
+        # Only web sources can be refreshed
+        if source_type != "web" or not url.startswith("http"):
+            raise HTTPException(status_code=400, detail="Only web sources can be refreshed")
+        
+        # Create job
+        job_id = str(uuid.uuid4())[:8]
+        _jobs[job_id] = {
+            "id": job_id,
+            "type": "refresh",
+            "source_id": source_id,
+            "url": url,
+            "status": "pending",
+            "progress": 0,
+            "total": 0,
+            "current": "",
+            "started_at": datetime.now().isoformat(),
+            "error": None,
+        }
+        
+        # Start background task
+        background_tasks.add_task(run_refresh_job, job_id, source_id, url, title)
+        
+        return {"job_id": job_id, "status": "started"}
     
     # --- HTMX Partials ---
     
@@ -492,6 +531,79 @@ def run_upload_job(job_id: str, file_path: str, title: str):
             os.unlink(file_path)
         except:
             pass
+        
+    except Exception as e:
+        job["status"] = "error"
+        job["error"] = str(e)
+
+
+def run_refresh_job(job_id: str, source_id: str, url: str, title: str | None):
+    """Background task to refresh a source by re-crawling."""
+    from knowledgebase.ingest.crawler import crawl_url
+    from knowledgebase.ingest.chunker import chunk_markdown
+    
+    job = _jobs[job_id]
+    job["status"] = "running"
+    
+    try:
+        kb = KnowledgeBase()
+        
+        # Delete old chunks
+        job["current"] = "Deleting old chunks..."
+        kb._request("DELETE", kb._chunks_table, params={"source_id": f"eq.{source_id}"})
+        
+        # Re-crawl
+        job["current"] = f"Crawling {url}..."
+        page = crawl_url(url)
+        
+        if not page:
+            job["status"] = "error"
+            job["error"] = "Failed to crawl URL"
+            return
+        
+        # Update source metadata
+        kb._request(
+            "PATCH",
+            kb._sources_table,
+            data={
+                "title": title or page.title,
+                "metadata": {"refreshed_at": datetime.now().isoformat()},
+            },
+            params={"id": f"eq.{source_id}"},
+        )
+        
+        # Chunk and add content
+        job["current"] = "Creating chunks..."
+        chunks = chunk_markdown(page.content)
+        total_chunks = 0
+        
+        for chunk in chunks:
+            kb.add_chunk(
+                source_id=source_id,
+                content=chunk.content,
+                chunk_index=chunk.chunk_number,
+                metadata={"url": page.url, "title": page.title},
+            )
+            total_chunks += 1
+        
+        # Generate embeddings
+        job["current"] = "Generating embeddings..."
+        chunks_to_embed = kb.get_chunks_without_embeddings(limit=500)
+        embedded = 0
+        
+        for chunk in chunks_to_embed:
+            if str(chunk.source_id) == str(source_id):
+                embedding = get_embedding(chunk.content)
+                if embedding:
+                    kb.update_chunk_embedding(chunk.id, embedding)
+                    embedded += 1
+        
+        job["status"] = "completed"
+        job["result"] = {
+            "source_id": source_id,
+            "chunks_created": total_chunks,
+            "embeddings_generated": embedded,
+        }
         
     except Exception as e:
         job["status"] = "error"

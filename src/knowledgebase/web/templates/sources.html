@@ -65,8 +65,13 @@
                        title="Open URL">
                         <i data-lucide="external-link" class="w-4 h-4"></i>
                     </a>
+                    <button @click="refreshSource('{{ source.id }}', '{{ source.title|e }}')"
+                            class="p-2 rounded-lg hover:bg-cyan-500/20 text-gray-400 hover:text-cyan-400"
+                            title="Refresh source">
+                        <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                    </button>
                     {% endif %}
-                    <button @click="if(confirm('Delete this source and all its chunks?')) deleteSource({{ source.id }})"
+                    <button @click="if(confirm('Delete this source and all its chunks?')) deleteSource('{{ source.id }}')"
                             class="p-2 rounded-lg hover:bg-red-500/20 text-gray-400 hover:text-red-400"
                             title="Delete source">
                         <i data-lucide="trash-2" class="w-4 h-4"></i>
@@ -115,6 +120,39 @@ function deleteSource(sourceId) {
             }
         })
         .catch(e => alert('Delete failed: ' + e.message));
+}
+
+function refreshSource(sourceId, title) {
+    if (!confirm(`Refresh "${title}"? This will re-crawl and update all chunks.`)) {
+        return;
+    }
+    
+    fetch(`/api/sources/${sourceId}/refresh`, { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.job_id) {
+                alert(`Refresh started! Job ID: ${data.job_id}\nThis may take a moment.`);
+                // Poll for completion
+                pollRefreshJob(data.job_id);
+            }
+        })
+        .catch(e => alert('Refresh failed: ' + e.message));
+}
+
+function pollRefreshJob(jobId) {
+    fetch(`/api/jobs/${jobId}`)
+        .then(r => r.json())
+        .then(job => {
+            if (job.status === 'completed') {
+                alert(`Refresh complete!\n${job.result.chunks_created} chunks, ${job.result.embeddings_generated} embeddings`);
+                window.location.reload();
+            } else if (job.status === 'error') {
+                alert(`Refresh failed: ${job.error}`);
+            } else {
+                // Still running, poll again
+                setTimeout(() => pollRefreshJob(jobId), 2000);
+            }
+        });
 }
 </script>
 {% endblock %}
