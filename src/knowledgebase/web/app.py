@@ -391,10 +391,9 @@ def run_crawl_job(job_id: str, url: str, max_depth: int, title: str | None):
             for chunk in chunks:
                 kb.add_chunk(
                     source_id=source.id,
-                    url=page.url,
-                    chunk_number=chunk.chunk_number,
                     content=chunk.content,
-                    title=page.title,
+                    chunk_index=chunk.chunk_number,
+                    metadata={"url": page.url, "title": page.title},
                 )
                 total_chunks += 1
         
@@ -404,7 +403,8 @@ def run_crawl_job(job_id: str, url: str, max_depth: int, title: str | None):
         embedded = 0
         
         for chunk in chunks_to_embed:
-            if chunk.source_id == source.id or chunk.url.startswith(url):
+            # Compare as strings to handle UUID vs int
+            if str(chunk.source_id) == str(source.id):
                 embedding = get_embedding(chunk.content)
                 if embedding:
                     kb.update_chunk_embedding(chunk.id, embedding)
@@ -463,10 +463,9 @@ def run_upload_job(job_id: str, file_path: str, title: str):
         for chunk in chunks:
             kb.add_chunk(
                 source_id=source.id,
-                url=f"file://{file_path}",
-                chunk_number=chunk.chunk_number,
                 content=chunk.content,
-                title=doc.title,
+                chunk_index=chunk.chunk_number,
+                metadata={"title": doc.title, "path": file_path},
             )
         
         # Generate embeddings
@@ -475,7 +474,7 @@ def run_upload_job(job_id: str, file_path: str, title: str):
         embedded = 0
         
         for chunk in chunks_to_embed:
-            if chunk.source_id == source.id:
+            if str(chunk.source_id) == str(source.id):
                 embedding = get_embedding(chunk.content)
                 if embedding:
                     kb.update_chunk_embedding(chunk.id, embedding)

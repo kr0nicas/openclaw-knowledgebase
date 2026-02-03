@@ -11,7 +11,7 @@ from knowledgebase.embeddings import get_embedding
 @dataclass
 class Source:
     """A knowledge source (URL or document)."""
-    id: int
+    id: int | str  # Can be int or UUID depending on schema
     url: str
     title: str | None = None
     source_type: str = "web"
@@ -28,14 +28,21 @@ class Source:
 @dataclass  
 class Chunk:
     """A text chunk with optional embedding."""
-    id: int
-    source_id: int
-    url: str
-    chunk_number: int
-    title: str | None
+    id: int | str  # Can be int or UUID
+    source_id: int | str
     content: str
+    chunk_index: int = 0  # Archon schema uses chunk_index
+    metadata: dict | None = None
     embedding: list[float] | None = None
     similarity: float | None = None
+    # Optional fields from search results (joined from source)
+    url: str | None = None
+    title: str | None = None
+    
+    # Alias for compatibility
+    @property
+    def chunk_number(self) -> int:
+        return self.chunk_index
 
 
 class KnowledgeBase:
@@ -59,13 +66,20 @@ class KnowledgeBase:
         endpoint: str,
         data: dict | list | None = None,
         params: dict | None = None,
+        return_representation: bool = False,
     ) -> requests.Response:
         """Make a request to Supabase REST API."""
         url = f"{self.config.supabase_url}/rest/v1/{endpoint}"
+        headers = dict(self._headers)
+        
+        # For POST/PATCH, request the created/updated row back
+        if return_representation and method in ("POST", "PATCH"):
+            headers["Prefer"] = "return=representation"
+        
         return requests.request(
             method,
             url,
-            headers=self._headers,
+            headers=headers,
             json=data,
             params=params,
             timeout=30,
@@ -88,11 +102,17 @@ class KnowledgeBase:
             "metadata": metadata or {},
         }
         
-        resp = self._request("POST", self._sources_table, data=data)
+        resp = self._request("POST", self._sources_table, data=data, return_representation=True)
         if resp.status_code == 201:
-            result = resp.json()
-            if result:
-                return Source(**result[0]) if isinstance(result, list) else Source(**result)
+            try:
+                result = resp.json()
+                if result:
+                    row = result[0] if isinstance(result, list) else result
+                    known_fields = {"id", "url", "title", "source_type", "metadata", "description", "created_at", "updated_at"}
+                    filtered = {k: v for k, v in row.items() if k in known_fields}
+                    return Source(**filtered)
+            except Exception:
+                pass
         return None
     
     def get_source(self, url: str) -> Source | None:
@@ -124,29 +144,32 @@ class KnowledgeBase:
     
     def add_chunk(
         self,
-        source_id: int,
-        url: str,
-        chunk_number: int,
+        source_id: int | str,
         content: str,
-        title: str | None = None,
+        chunk_index: int = 0,
+        metadata: dict | None = None,
         embedding: list[float] | None = None,
-    ) -> Chunk | None:
-        """Add a chunk to the knowledgebase."""
+        # Legacy params (ignored but accepted for compatibility)
+        url: str | None = None,
+        chunk_number: int | None = None,
+        title: str | None = None,
+    ) -> bool:
+        """Add a chunk to the knowledgebase. Returns True on success."""
+        # Use chunk_number as chunk_index if provided (compatibility)
+        idx = chunk_index if chunk_number is None else chunk_number
+        
         data = {
             "source_id": source_id,
-            "url": url,
-            "chunk_number": chunk_number,
+            "chunk_index": idx,
             "content": content,
-            "title": title,
-            "embedding": embedding,
+            "metadata": metadata or {},
         }
         
+        if embedding:
+            data["embedding"] = embedding
+        
         resp = self._request("POST", self._chunks_table, data=data)
-        if resp.status_code == 201:
-            result = resp.json()
-            if result:
-                return Chunk(**result[0]) if isinstance(result, list) else Chunk(**result)
-        return None
+        return resp.status_code == 201
     
     def add_chunks_batch(self, chunks: list[dict]) -> int:
         """Add multiple chunks at once. Returns number added."""
@@ -165,12 +188,22 @@ class KnowledgeBase:
             self._chunks_table,
             params={
                 "embedding": "is.null",
-                "select": "id,source_id,url,chunk_number,title,content",
+                "select": "id,source_id,chunk_index,content,metadata",
                 "limit": str(limit),
             },
         )
         if resp.status_code == 200:
-            return [Chunk(**c, embedding=None) for c in resp.json()]
+            chunks = []
+            for c in resp.json():
+                chunks.append(Chunk(
+                    id=c["id"],
+                    source_id=c["source_id"],
+                    content=c["content"],
+                    chunk_index=c.get("chunk_index", 0),
+                    metadata=c.get("metadata"),
+                    embedding=None,
+                ))
+            return chunks
         return []
     
     def update_chunk_embedding(self, chunk_id: int, embedding: list[float]) -> bool:
@@ -256,11 +289,11 @@ class KnowledgeBase:
             return [
                 Chunk(
                     id=r["id"],
-                    source_id=0,  # Not returned by search
-                    url=r["url"],
-                    chunk_number=0,
-                    title=r.get("title"),
+                    source_id=r.get("source_id", ""),
                     content=r["content"],
+                    chunk_index=r.get("chunk_index", 0),
+                    url=r.get("url"),
+                    title=r.get("title"),
                     similarity=r.get("similarity"),
                 )
                 for r in results
@@ -308,11 +341,11 @@ class KnowledgeBase:
             return [
                 Chunk(
                     id=r["id"],
-                    source_id=0,
-                    url=r["url"],
-                    chunk_number=0,
-                    title=r.get("title"),
+                    source_id=r.get("source_id", ""),
                     content=r["content"],
+                    chunk_index=r.get("chunk_index", 0),
+                    url=r.get("url"),
+                    title=r.get("title"),
                     similarity=r.get("combined_score"),
                 )
                 for r in results
