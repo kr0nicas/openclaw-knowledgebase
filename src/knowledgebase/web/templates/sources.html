@@ -3,7 +3,7 @@
 {% block title %}Sources - OpenClaw Knowledgebase{% endblock %}
 
 {% block content %}
-<div class="p-6 space-y-6">
+<div class="p-6 space-y-6" x-data="{ typeFilter: 'all', tagFilter: '' }">
     <!-- Header -->
     <div class="flex items-center justify-between">
         <div class="flex items-center gap-3">
@@ -25,12 +25,49 @@
         </button>
     </div>
     
-    <!-- Filter / Search (future) -->
-    <div class="flex items-center gap-4">
+    <!-- Filter / Search -->
+    <div class="flex items-center gap-4 flex-wrap">
+        <!-- Type Filter -->
         <div class="flex items-center gap-2 p-1 glass rounded-lg">
-            <button class="px-3 py-1.5 rounded-md bg-white/10 text-white text-sm">All</button>
-            <button class="px-3 py-1.5 rounded-md text-gray-400 hover:text-white text-sm">Web</button>
-            <button class="px-3 py-1.5 rounded-md text-gray-400 hover:text-white text-sm">Documents</button>
+            <button @click="typeFilter = 'all'" 
+                    :class="typeFilter === 'all' ? 'bg-white/10 text-white' : 'text-gray-400 hover:text-white'"
+                    class="px-3 py-1.5 rounded-md text-sm transition-colors">All</button>
+            <button @click="typeFilter = 'web'" 
+                    :class="typeFilter === 'web' ? 'bg-cyan-500/20 text-cyan-400' : 'text-gray-400 hover:text-white'"
+                    class="px-3 py-1.5 rounded-md text-sm transition-colors">Web</button>
+            <button @click="typeFilter = 'document'" 
+                    :class="typeFilter === 'document' ? 'bg-purple-500/20 text-purple-400' : 'text-gray-400 hover:text-white'"
+                    class="px-3 py-1.5 rounded-md text-sm transition-colors">Documents</button>
+        </div>
+        
+        <!-- Tag Filter -->
+        <div class="relative" x-data="{ open: false }">
+            <button @click="open = !open" 
+                    class="flex items-center gap-2 px-3 py-1.5 rounded-lg glass-light border border-white/10 text-sm"
+                    :class="tagFilter ? 'text-purple-400' : 'text-gray-400'">
+                <i data-lucide="tag" class="w-4 h-4"></i>
+                <span x-text="tagFilter || 'Filter by tag'"></span>
+                <i data-lucide="chevron-down" class="w-4 h-4"></i>
+            </button>
+            
+            <div x-show="open" @click.away="open = false" x-cloak
+                 class="absolute top-full left-0 mt-1 w-48 glass rounded-lg border border-white/10 shadow-xl z-10">
+                <button @click="tagFilter = ''; open = false" 
+                        class="w-full px-3 py-2 text-left text-sm text-gray-400 hover:bg-white/5">
+                    All tags
+                </button>
+                {% for source in sources %}
+                    {% if source.metadata and source.metadata.tags %}
+                        {% for tag in source.metadata.tags %}
+                        <button @click="tagFilter = '{{ tag }}'; open = false"
+                                class="w-full px-3 py-2 text-left text-sm text-gray-300 hover:bg-white/5 flex items-center gap-2">
+                            <i data-lucide="tag" class="w-3 h-3 text-purple-400"></i>
+                            {{ tag }}
+                        </button>
+                        {% endfor %}
+                    {% endif %}
+                {% endfor %}
+            </div>
         </div>
         
         <span class="text-sm text-gray-500">{{ sources|length }} sources</span>
@@ -41,7 +78,10 @@
     <div class="grid grid-cols-2 gap-4">
         {% for source in sources %}
         <div class="glass rounded-xl p-4 hover:bg-white/5 transition-colors group
-            {% if source.source_type == 'web' %}edge-cyan{% else %}edge-purple{% endif %}">
+            {% if source.source_type == 'web' %}edge-cyan{% else %}edge-purple{% endif %}"
+             x-show="(typeFilter === 'all' || typeFilter === '{{ source.source_type or 'web' }}') && 
+                     (tagFilter === '' || {{ source.metadata.tags|tojson if source.metadata and source.metadata.tags else '[]' }}.includes(tagFilter))"
+             x-transition>
             
             <!-- Header -->
             <div class="flex items-start justify-between mb-3">
@@ -83,7 +123,44 @@
             <h3 class="font-semibold text-white mb-2 line-clamp-2">{{ source.title or 'Untitled' }}</h3>
             
             <!-- URL -->
-            <p class="text-xs text-gray-500 truncate mb-3">{{ source.url }}</p>
+            <p class="text-xs text-gray-500 truncate mb-2">{{ source.url }}</p>
+            
+            <!-- Tags -->
+            <div class="flex flex-wrap gap-1 mb-3" x-data="{ editing: false, newTag: '' }">
+                {% if source.metadata and source.metadata.tags %}
+                    {% for tag in source.metadata.tags %}
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-purple-500/20 text-purple-300">
+                        <i data-lucide="tag" class="w-3 h-3"></i>
+                        {{ tag }}
+                        <button @click.stop="removeTag('{{ source.id }}', '{{ tag }}')" 
+                                class="hover:text-red-400 ml-0.5">×</button>
+                    </span>
+                    {% endfor %}
+                {% endif %}
+                
+                <!-- Add tag button/input -->
+                <template x-if="!editing">
+                    <button @click.stop="editing = true" 
+                            class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs 
+                                   bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white">
+                        <i data-lucide="plus" class="w-3 h-3"></i>
+                        tag
+                    </button>
+                </template>
+                <template x-if="editing">
+                    <form @submit.prevent="addTag('{{ source.id }}', newTag); editing = false; newTag = ''"
+                          class="inline-flex">
+                        <input type="text" x-model="newTag" 
+                               @blur="editing = false"
+                               @keydown.escape="editing = false"
+                               placeholder="tag..."
+                               class="w-20 px-2 py-0.5 rounded-full text-xs bg-white/10 border border-white/20 
+                                      text-white placeholder-gray-500 focus:outline-none focus:border-purple-500"
+                               x-ref="tagInput"
+                               x-init="$nextTick(() => $refs.tagInput?.focus())">
+                    </form>
+                </template>
+            </div>
             
             <!-- Stats -->
             <div class="flex items-center gap-4 text-xs text-gray-500">
@@ -154,6 +231,30 @@ function pollRefreshJob(jobId) {
                 setTimeout(() => pollRefreshJob(jobId), 2000);
             }
         });
+}
+
+function addTag(sourceId, tag) {
+    if (!tag || !tag.trim()) return;
+    
+    const formData = new FormData();
+    formData.append('tag', tag.trim().toLowerCase());
+    
+    fetch(`/api/sources/${sourceId}/tags`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(r => r.json())
+    .then(() => window.location.reload())
+    .catch(e => console.error('Add tag failed:', e));
+}
+
+function removeTag(sourceId, tag) {
+    fetch(`/api/sources/${sourceId}/tags/${encodeURIComponent(tag)}`, {
+        method: 'DELETE'
+    })
+    .then(r => r.json())
+    .then(() => window.location.reload())
+    .catch(e => console.error('Remove tag failed:', e));
 }
 </script>
 {% endblock %}

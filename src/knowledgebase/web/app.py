@@ -327,6 +327,115 @@ def create_app() -> FastAPI:
         
         return {"job_id": job_id, "status": "started"}
     
+    # --- Tags API ---
+    
+    @app.get("/api/sources/{source_id}/tags")
+    async def api_get_tags(source_id: str):
+        """Get tags for a source."""
+        kb = KnowledgeBase()
+        resp = kb._request("GET", kb._sources_table, params={
+            "id": f"eq.{source_id}",
+            "select": "metadata"
+        })
+        if resp.status_code != 200 or not resp.json():
+            raise HTTPException(status_code=404, detail="Source not found")
+        
+        metadata = resp.json()[0].get("metadata", {}) or {}
+        return {"tags": metadata.get("tags", [])}
+    
+    @app.put("/api/sources/{source_id}/tags")
+    async def api_set_tags(source_id: str, tags: list[str] = Form(...)):
+        """Set tags for a source (replaces existing)."""
+        kb = KnowledgeBase()
+        
+        # Get current metadata
+        resp = kb._request("GET", kb._sources_table, params={
+            "id": f"eq.{source_id}",
+            "select": "metadata"
+        })
+        if resp.status_code != 200 or not resp.json():
+            raise HTTPException(status_code=404, detail="Source not found")
+        
+        metadata = resp.json()[0].get("metadata", {}) or {}
+        metadata["tags"] = tags
+        
+        # Update
+        kb._request("PATCH", kb._sources_table, 
+            data={"metadata": metadata},
+            params={"id": f"eq.{source_id}"}
+        )
+        
+        return {"tags": tags}
+    
+    @app.post("/api/sources/{source_id}/tags")
+    async def api_add_tag(source_id: str, tag: str = Form(...)):
+        """Add a single tag to a source."""
+        kb = KnowledgeBase()
+        
+        # Get current metadata
+        resp = kb._request("GET", kb._sources_table, params={
+            "id": f"eq.{source_id}",
+            "select": "metadata"
+        })
+        if resp.status_code != 200 or not resp.json():
+            raise HTTPException(status_code=404, detail="Source not found")
+        
+        metadata = resp.json()[0].get("metadata", {}) or {}
+        tags = metadata.get("tags", [])
+        
+        if tag not in tags:
+            tags.append(tag)
+            metadata["tags"] = tags
+            
+            kb._request("PATCH", kb._sources_table,
+                data={"metadata": metadata},
+                params={"id": f"eq.{source_id}"}
+            )
+        
+        return {"tags": tags}
+    
+    @app.delete("/api/sources/{source_id}/tags/{tag}")
+    async def api_remove_tag(source_id: str, tag: str):
+        """Remove a tag from a source."""
+        kb = KnowledgeBase()
+        
+        # Get current metadata
+        resp = kb._request("GET", kb._sources_table, params={
+            "id": f"eq.{source_id}",
+            "select": "metadata"
+        })
+        if resp.status_code != 200 or not resp.json():
+            raise HTTPException(status_code=404, detail="Source not found")
+        
+        metadata = resp.json()[0].get("metadata", {}) or {}
+        tags = metadata.get("tags", [])
+        
+        if tag in tags:
+            tags.remove(tag)
+            metadata["tags"] = tags
+            
+            kb._request("PATCH", kb._sources_table,
+                data={"metadata": metadata},
+                params={"id": f"eq.{source_id}"}
+            )
+        
+        return {"tags": tags}
+    
+    @app.get("/api/tags")
+    async def api_list_all_tags():
+        """List all unique tags across all sources."""
+        kb = KnowledgeBase()
+        sources = kb.list_sources(limit=500)
+        
+        all_tags = set()
+        for s in sources:
+            if s.metadata and isinstance(s.metadata, dict):
+                tags = s.metadata.get("tags", [])
+                if isinstance(tags, list):
+                    all_tags.update(tags)
+        
+        return {"tags": sorted(all_tags)}
+    
     # --- HTMX Partials ---
     
     @app.get("/htmx/add-modal", response_class=HTMLResponse)
