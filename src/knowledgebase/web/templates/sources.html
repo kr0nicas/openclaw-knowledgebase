@@ -16,10 +16,12 @@
             </div>
         </div>
         
-        <button disabled class="px-4 py-2.5 rounded-xl bg-purple-500/50 text-white/50 flex items-center gap-2 cursor-not-allowed">
+        <button @click="showAddModal = true" 
+                class="px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-500 to-purple-600 
+                       hover:from-purple-600 hover:to-purple-700 text-white flex items-center gap-2
+                       shadow-lg shadow-purple-500/30 transition-all">
             <i data-lucide="plus" class="w-5 h-5"></i>
             Add Source
-            <span class="text-xs">(coming soon)</span>
         </button>
     </div>
     
@@ -59,10 +61,16 @@
                 <div class="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
                     {% if source.url and source.url.startswith('http') %}
                     <a href="{{ source.url }}" target="_blank" 
-                       class="p-2 rounded-lg hover:bg-white/10 text-gray-400 hover:text-cyan-400">
+                       class="p-2 rounded-lg hover:bg-white/10 text-gray-400 hover:text-cyan-400"
+                       title="Open URL">
                         <i data-lucide="external-link" class="w-4 h-4"></i>
                     </a>
                     {% endif %}
+                    <button @click="if(confirm('Delete this source and all its chunks?')) deleteSource({{ source.id }})"
+                            class="p-2 rounded-lg hover:bg-red-500/20 text-gray-400 hover:text-red-400"
+                            title="Delete source">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
                 </div>
             </div>
             
@@ -96,4 +104,17 @@
     </div>
     {% endif %}
 </div>
+
+<script>
+function deleteSource(sourceId) {
+    fetch(`/api/sources/${sourceId}`, { method: 'DELETE' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'deleted') {
+                window.location.reload();
+            }
+        })
+        .catch(e => alert('Delete failed: ' + e.message));
+}
+</script>
 {% endblock %}

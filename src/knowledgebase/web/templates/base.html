@@ -34,6 +34,9 @@
     <!-- HTMX -->
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     
+    <!-- Alpine.js -->
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
     
@@ -71,7 +74,10 @@
         .glow-pulse { animation: pulse-glow 2s ease-in-out infinite; }
     </style>
 </head>
-<body class="h-full bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
+<body class="h-full bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white"
+      x-data="{ showAddModal: false }"
+      @keydown.escape="showAddModal = false"
+      @close-modal.window="showAddModal = false">
     <div class="min-h-full flex">
         <!-- Sidebar -->
         <aside class="w-64 glass border-r border-white/10 p-4 flex flex-col">
@@ -123,6 +129,12 @@
             {% block content %}{% endblock %}
         </main>
     </div>
+    
+    <!-- Add Modal (loaded dynamically) -->
+    <template x-if="showAddModal">
+        <div x-init="htmx.ajax('GET', '/htmx/add-modal', '#modal-container')"
+             id="modal-container"></div>
+    </template>
     
     <script>
         // Initialize Lucide icons

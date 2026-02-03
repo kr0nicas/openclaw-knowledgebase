@@ -1,11 +1,15 @@
 """FastAPI web application for OpenClaw Knowledgebase."""
 
+import asyncio
 import os
+import tempfile
+import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, Request, Form, UploadFile, File, HTTPException, Query
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import FastAPI, Request, Form, UploadFile, File, HTTPException, Query, BackgroundTasks
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -13,6 +17,9 @@ from knowledgebase.client import KnowledgeBase
 from knowledgebase.config import get_config
 from knowledgebase.embeddings import test_ollama_connection, get_embedding
 from knowledgebase.search import search, search_hybrid
+
+# Job tracking (in-memory, resets on restart)
+_jobs: dict[str, dict] = {}
 
 # Paths
 BASE_DIR = Path(__file__).parent
@@ -189,7 +196,307 @@ def create_app() -> FastAPI:
             "ollama": {"ok": ollama_ok, "message": ollama_msg},
         }
     
+    # --- Ingestion Endpoints ---
+    
+    @app.post("/api/crawl")
+    async def api_crawl(
+        background_tasks: BackgroundTasks,
+        url: str = Form(...),
+        max_depth: int = Form(default=2),
+        title: str = Form(default=None),
+    ):
+        """Start crawling a URL."""
+        from knowledgebase.ingest.crawler import check_crawler_deps
+        
+        # Check dependencies
+        ok, msg = check_crawler_deps()
+        if not ok:
+            raise HTTPException(status_code=400, detail=msg)
+        
+        # Create job
+        job_id = str(uuid.uuid4())[:8]
+        _jobs[job_id] = {
+            "id": job_id,
+            "type": "crawl",
+            "url": url,
+            "status": "pending",
+            "progress": 0,
+            "total": 0,
+            "current": "",
+            "started_at": datetime.now().isoformat(),
+            "error": None,
+        }
+        
+        # Start background task
+        background_tasks.add_task(run_crawl_job, job_id, url, max_depth, title)
+        
+        return {"job_id": job_id, "status": "started"}
+    
+    @app.post("/api/upload")
+    async def api_upload(
+        background_tasks: BackgroundTasks,
+        file: UploadFile = File(...),
+        title: str = Form(default=None),
+    ):
+        """Upload and process a document."""
+        # Save to temp file
+        suffix = Path(file.filename).suffix if file.filename else ".txt"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            content = await file.read()
+            tmp.write(content)
+            tmp_path = tmp.name
+        
+        # Create job
+        job_id = str(uuid.uuid4())[:8]
+        _jobs[job_id] = {
+            "id": job_id,
+            "type": "upload",
+            "filename": file.filename,
+            "status": "pending",
+            "progress": 0,
+            "total": 1,
+            "started_at": datetime.now().isoformat(),
+            "error": None,
+        }
+        
+        # Start background task
+        background_tasks.add_task(run_upload_job, job_id, tmp_path, title or file.filename)
+        
+        return {"job_id": job_id, "status": "started"}
+    
+    @app.get("/api/jobs/{job_id}")
+    async def api_job_status(job_id: str):
+        """Get job status."""
+        if job_id not in _jobs:
+            raise HTTPException(status_code=404, detail="Job not found")
+        return _jobs[job_id]
+    
+    @app.get("/api/jobs")
+    async def api_jobs():
+        """List all jobs."""
+        return list(_jobs.values())
+    
+    @app.delete("/api/sources/{source_id}")
+    async def api_delete_source(source_id: int):
+        """Delete a source and its chunks."""
+        kb = KnowledgeBase()
+        # Delete chunks first
+        kb._request("DELETE", kb._chunks_table, params={"source_id": f"eq.{source_id}"})
+        # Delete source
+        resp = kb._request("DELETE", kb._sources_table, params={"id": f"eq.{source_id}"})
+        if resp.status_code in (200, 204):
+            return {"status": "deleted", "source_id": source_id}
+        raise HTTPException(status_code=500, detail="Failed to delete source")
+    
+    # --- HTMX Partials ---
+    
+    @app.get("/htmx/add-modal", response_class=HTMLResponse)
+    async def htmx_add_modal(request: Request):
+        """Return the Add Source modal."""
+        return templates.TemplateResponse("partials/add_modal.html", {
+            "request": request,
+        })
+    
+    @app.get("/htmx/job-progress/{job_id}", response_class=HTMLResponse)
+    async def htmx_job_progress(request: Request, job_id: str):
+        """Return job progress HTML."""
+        job = _jobs.get(job_id, {})
+        return templates.TemplateResponse("partials/job_progress.html", {
+            "request": request,
+            "job": job,
+        })
+    
+    @app.get("/htmx/sources-list", response_class=HTMLResponse)
+    async def htmx_sources_list(request: Request):
+        """Return sources list for refresh."""
+        kb = KnowledgeBase()
+        sources = kb.list_sources(limit=100)
+        return templates.TemplateResponse("partials/sources_list.html", {
+            "request": request,
+            "sources": sources,
+        })
+    
     return app
+
+
+# --- Background Jobs ---
+
+def run_crawl_job(job_id: str, url: str, max_depth: int, title: str | None):
+    """Background task to crawl a URL."""
+    from knowledgebase.ingest.crawler import crawl_website, crawl_url
+    from knowledgebase.ingest.chunker import chunk_markdown
+    
+    job = _jobs[job_id]
+    job["status"] = "running"
+    
+    try:
+        kb = KnowledgeBase()
+        config = get_config()
+        
+        # Check if URL already exists
+        existing = kb.get_source(url)
+        if existing:
+            job["status"] = "error"
+            job["error"] = f"URL already exists (source_id: {existing.id})"
+            return
+        
+        total_chunks = 0
+        pages_crawled = 0
+        
+        def progress_callback(crawled: int, total: int, current_url: str):
+            nonlocal pages_crawled
+            pages_crawled = crawled
+            job["progress"] = crawled
+            job["total"] = total
+            job["current"] = current_url
+        
+        if max_depth == 0:
+            # Single page
+            page = crawl_url(url)
+            if page:
+                pages = [page]
+            else:
+                pages = []
+        else:
+            # Recursive crawl
+            pages = list(crawl_website(
+                url,
+                max_depth=max_depth,
+                max_pages=50,
+                progress_callback=progress_callback,
+            ))
+        
+        if not pages:
+            job["status"] = "error"
+            job["error"] = "No pages crawled (check URL)"
+            return
+        
+        # Create source
+        source = kb.add_source(
+            url=url,
+            title=title or pages[0].title or url,
+            source_type="web",
+            metadata={"pages_crawled": len(pages), "max_depth": max_depth},
+        )
+        
+        if not source:
+            job["status"] = "error"
+            job["error"] = "Failed to create source"
+            return
+        
+        # Chunk and add content
+        for page in pages:
+            chunks = chunk_markdown(page.content)
+            
+            for chunk in chunks:
+                kb.add_chunk(
+                    source_id=source.id,
+                    url=page.url,
+                    chunk_number=chunk.chunk_number,
+                    content=chunk.content,
+                    title=page.title,
+                )
+                total_chunks += 1
+        
+        # Generate embeddings
+        job["current"] = "Generating embeddings..."
+        chunks_to_embed = kb.get_chunks_without_embeddings(limit=500)
+        embedded = 0
+        
+        for chunk in chunks_to_embed:
+            if chunk.source_id == source.id or chunk.url.startswith(url):
+                embedding = get_embedding(chunk.content)
+                if embedding:
+                    kb.update_chunk_embedding(chunk.id, embedding)
+                    embedded += 1
+        
+        job["status"] = "completed"
+        job["result"] = {
+            "source_id": source.id,
+            "pages_crawled": len(pages),
+            "chunks_created": total_chunks,
+            "embeddings_generated": embedded,
+        }
+        
+    except Exception as e:
+        job["status"] = "error"
+        job["error"] = str(e)
+
+
+def run_upload_job(job_id: str, file_path: str, title: str):
+    """Background task to process an uploaded document."""
+    from knowledgebase.ingest.docling_parser import parse_document
+    from knowledgebase.ingest.chunker import chunk_markdown
+    
+    job = _jobs[job_id]
+    job["status"] = "running"
+    
+    try:
+        kb = KnowledgeBase()
+        
+        # Parse document
+        job["current"] = "Parsing document..."
+        doc = parse_document(file_path)
+        
+        if not doc:
+            job["status"] = "error"
+            job["error"] = "Failed to parse document"
+            return
+        
+        # Create source
+        source = kb.add_source(
+            url=f"file://{file_path}",
+            title=title or doc.title,
+            source_type="document",
+            metadata={"format": doc.format, "original_path": file_path},
+        )
+        
+        if not source:
+            job["status"] = "error"
+            job["error"] = "Failed to create source"
+            return
+        
+        # Chunk and add
+        job["current"] = "Chunking content..."
+        chunks = chunk_markdown(doc.content)
+        
+        for chunk in chunks:
+            kb.add_chunk(
+                source_id=source.id,
+                url=f"file://{file_path}",
+                chunk_number=chunk.chunk_number,
+                content=chunk.content,
+                title=doc.title,
+            )
+        
+        # Generate embeddings
+        job["current"] = "Generating embeddings..."
+        chunks_to_embed = kb.get_chunks_without_embeddings(limit=500)
+        embedded = 0
+        
+        for chunk in chunks_to_embed:
+            if chunk.source_id == source.id:
+                embedding = get_embedding(chunk.content)
+                if embedding:
+                    kb.update_chunk_embedding(chunk.id, embedding)
+                    embedded += 1
+        
+        job["status"] = "completed"
+        job["result"] = {
+            "source_id": source.id,
+            "chunks_created": len(chunks),
+            "embeddings_generated": embedded,
+        }
+        
+        # Cleanup temp file
+        try:
+            os.unlink(file_path)
+        except:
+            pass
+        
+    except Exception as e:
+        job["status"] = "error"
+        job["error"] = str(e)
 
 
 # Create app instance for uvicorn
