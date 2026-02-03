@@ -226,29 +226,31 @@
     }
     
     function pollJob(jobId, ctx) {
-        fetch(`/api/jobs/${jobId}`)
-            .then(r => r.json())
-            .then(job => {
-                // Update progress container
-                const container = document.getElementById('job-progress-container');
-                container.innerHTML = renderJobProgress(job);
-                lucide.createIcons();
-                
-                if (job.status === 'pending' || job.status === 'running') {
-                    setTimeout(() => pollJob(jobId, ctx), 1000);
-                } else {
-                    ctx.isLoading = false;
+        // Use the global toast instead of inline progress
+        if (window.showJobToast) {
+            window.showJobToast(jobId, ctx.activeTab, ctx.activeTab === 'upload' ? ctx.selectedFile : document.querySelector('[name="url"]')?.value);
+        }
+        
+        // Close modal immediately
+        ctx.isLoading = false;
+        ctx.$dispatch('close-modal');
+        
+        // Poll for completion to refresh page
+        const checkJob = () => {
+            fetch(`/api/jobs/${jobId}`)
+                .then(r => r.json())
+                .then(job => {
                     if (job.status === 'completed') {
-                        // Refresh sources list after 1s
-                        setTimeout(() => {
-                            htmx.trigger(document.body, 'refresh-sources');
-                            ctx.$dispatch('close-modal');
-                        }, 1500);
-                    } else if (job.status === 'error') {
-                        ctx.error = job.error;
+                        // Refresh the page if on sources
+                        if (window.location.pathname === '/sources') {
+                            setTimeout(() => window.location.reload(), 1000);
+                        }
+                    } else if (job.status === 'pending' || job.status === 'running') {
+                        setTimeout(checkJob, 2000);
                     }
-                }
-            });
+                });
+        };
+        setTimeout(checkJob, 2000);
     }
     
     function renderJobProgress(job) {

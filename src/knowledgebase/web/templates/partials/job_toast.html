@@ -1,0 +1,174 @@
+<!-- Job Toast - Shows active job progress -->
+<div id="job-toast" 
+     x-data="jobToast()" 
+     x-show="visible" 
+     x-cloak
+     x-transition:enter="transition ease-out duration-300"
+     x-transition:enter-start="opacity-0 translate-y-2"
+     x-transition:enter-end="opacity-100 translate-y-0"
+     x-transition:leave="transition ease-in duration-200"
+     x-transition:leave-start="opacity-100 translate-y-0"
+     x-transition:leave-end="opacity-0 translate-y-2"
+     class="fixed bottom-4 right-4 z-50 w-96">
+    
+    <div class="glass rounded-xl p-4 shadow-2xl border border-white/10"
+         :class="{
+             'edge-cyan': status === 'running',
+             'edge-green': status === 'completed',
+             'edge-red': status === 'error'
+         }">
+        
+        <!-- Header -->
+        <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+                <template x-if="status === 'pending' || status === 'running'">
+                    <i data-lucide="loader-2" class="w-5 h-5 text-cyan-400 animate-spin"></i>
+                </template>
+                <template x-if="status === 'completed'">
+                    <i data-lucide="check-circle" class="w-5 h-5 text-green-400"></i>
+                </template>
+                <template x-if="status === 'error'">
+                    <i data-lucide="x-circle" class="w-5 h-5 text-red-400"></i>
+                </template>
+                <span class="font-medium text-white" x-text="typeLabel"></span>
+            </div>
+            <button @click="dismiss()" class="p-1 rounded hover:bg-white/10 text-gray-400">
+                <i data-lucide="x" class="w-4 h-4"></i>
+            </button>
+        </div>
+        
+        <!-- Progress Bar -->
+        <div x-show="status === 'running' && total > 0" class="mb-3">
+            <div class="h-2 bg-black/30 rounded-full overflow-hidden">
+                <div class="h-full bg-gradient-to-r from-cyan-500 to-cyan-400 transition-all duration-300"
+                     :style="`width: ${Math.round((progress / total) * 100)}%`"></div>
+            </div>
+            <div class="flex justify-between mt-1 text-xs text-gray-400">
+                <span x-text="current || 'Processing...'"></span>
+                <span x-text="`${progress}/${total}`"></span>
+            </div>
+        </div>
+        
+        <!-- Status Message -->
+        <div x-show="status === 'running' && total === 0" class="mb-2">
+            <p class="text-sm text-gray-300" x-text="current || 'Processing...'"></p>
+        </div>
+        
+        <!-- Result -->
+        <div x-show="status === 'completed' && result" class="text-sm text-gray-300">
+            <template x-if="result?.chunks_created !== undefined">
+                <p>
+                    <span x-text="result.chunks_created"></span> chunks, 
+                    <span x-text="result.embeddings_generated"></span> embeddings
+                </p>
+            </template>
+            <template x-if="result?.pages_crawled !== undefined">
+                <p>
+                    <span x-text="result.pages_crawled"></span> pages crawled
+                </p>
+            </template>
+        </div>
+        
+        <!-- Error -->
+        <div x-show="status === 'error'" class="text-sm text-red-400" x-text="error"></div>
+        
+        <!-- URL/File info -->
+        <div class="mt-2 text-xs text-gray-500 truncate" x-text="url || filename"></div>
+    </div>
+</div>
+
+<script>
+function jobToast() {
+    return {
+        visible: false,
+        jobId: null,
+        type: null,
+        status: 'pending',
+        progress: 0,
+        total: 0,
+        current: '',
+        result: null,
+        error: null,
+        url: null,
+        filename: null,
+        pollInterval: null,
+        
+        get typeLabel() {
+            const labels = {
+                'crawl': 'Crawling URL',
+                'upload': 'Processing File',
+                'refresh': 'Refreshing Source'
+            };
+            return labels[this.type] || 'Processing';
+        },
+        
+        show(jobId, type, urlOrFilename) {
+            this.jobId = jobId;
+            this.type = type;
+            this.url = type !== 'upload' ? urlOrFilename : null;
+            this.filename = type === 'upload' ? urlOrFilename : null;
+            this.status = 'pending';
+            this.progress = 0;
+            this.total = 0;
+            this.current = '';
+            this.result = null;
+            this.error = null;
+            this.visible = true;
+            this.startPolling();
+            lucide.createIcons();
+        },
+        
+        startPolling() {
+            this.pollInterval = setInterval(() => this.poll(), 1000);
+        },
+        
+        stopPolling() {
+            if (this.pollInterval) {
+                clearInterval(this.pollInterval);
+                this.pollInterval = null;
+            }
+        },
+        
+        async poll() {
+            if (!this.jobId) return;
+            
+            try {
+                const resp = await fetch(`/api/jobs/${this.jobId}`);
+                const job = await resp.json();
+                
+                this.status = job.status;
+                this.progress = job.progress || 0;
+                this.total = job.total || 0;
+                this.current = job.current || '';
+                this.result = job.result;
+                this.error = job.error;
+                
+                lucide.createIcons();
+                
+                if (job.status === 'completed' || job.status === 'error') {
+                    this.stopPolling();
+                    // Auto-dismiss after 5s on success
+                    if (job.status === 'completed') {
+                        setTimeout(() => this.dismiss(), 5000);
+                    }
+                }
+            } catch (e) {
+                console.error('Poll error:', e);
+            }
+        },
+        
+        dismiss() {
+            this.stopPolling();
+            this.visible = false;
+        }
+    };
+}
+
+// Global function to show job toast
+window.showJobToast = function(jobId, type, urlOrFilename) {
+    const toast = document.getElementById('job-toast');
+    if (toast && toast.__x) {
+        toast.__x.$data.show(jobId, type, urlOrFilename);
+    }
+};
+</script>

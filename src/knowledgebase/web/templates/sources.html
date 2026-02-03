@@ -131,8 +131,11 @@ function refreshSource(sourceId, title) {
         .then(r => r.json())
         .then(data => {
             if (data.job_id) {
-                alert(`Refresh started! Job ID: ${data.job_id}\nThis may take a moment.`);
-                // Poll for completion
+                // Show progress toast
+                if (window.showJobToast) {
+                    window.showJobToast(data.job_id, 'refresh', title);
+                }
+                // Poll for completion to refresh page
                 pollRefreshJob(data.job_id);
             }
         })
@@ -144,12 +147,10 @@ function pollRefreshJob(jobId) {
         .then(r => r.json())
         .then(job => {
             if (job.status === 'completed') {
-                alert(`Refresh complete!\n${job.result.chunks_created} chunks, ${job.result.embeddings_generated} embeddings`);
-                window.location.reload();
+                setTimeout(() => window.location.reload(), 1000);
             } else if (job.status === 'error') {
-                alert(`Refresh failed: ${job.error}`);
+                // Error shown in toast
             } else {
-                // Still running, poll again
                 setTimeout(() => pollRefreshJob(jobId), 2000);
             }
         });
