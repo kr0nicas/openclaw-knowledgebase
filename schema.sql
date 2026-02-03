@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS kb_chunks (
     id SERIAL PRIMARY KEY,
     source_id INTEGER REFERENCES kb_sources(id) ON DELETE CASCADE,
     url TEXT NOT NULL,
-    chunk_number INTEGER NOT NULL,
+    chunk_index INTEGER NOT NULL,  -- Archon-compatible naming
     title TEXT,
     summary TEXT,
     content TEXT NOT NULL,
@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS kb_chunks (
     embedding vector(768),  -- nomic-embed-text dimensions
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     
-    UNIQUE(url, chunk_number)
+    UNIQUE(url, chunk_index)
 );
 
 -- Index for fast vector similarity search
