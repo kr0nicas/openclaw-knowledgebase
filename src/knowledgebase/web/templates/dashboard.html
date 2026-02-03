@@ -90,6 +90,31 @@
         </div>
     </div>
     
+    <!-- Embedding Progress -->
+    {% set embed_percent = (stats.chunks_with_embeddings / stats.total_chunks * 100) if stats.total_chunks > 0 else 100 %}
+    <div class="glass rounded-xl p-4">
+        <div class="flex items-center justify-between mb-2">
+            <h3 class="text-sm font-medium text-gray-300 flex items-center gap-2">
+                <i data-lucide="cpu" class="w-4 h-4 text-cyan-400"></i>
+                Embedding Coverage
+            </h3>
+            <span class="text-sm {% if embed_percent >= 95 %}text-green-400{% elif embed_percent >= 80 %}text-yellow-400{% else %}text-red-400{% endif %}">
+                {{ "%.1f"|format(embed_percent) }}%
+            </span>
+        </div>
+        <div class="h-3 bg-black/30 rounded-full overflow-hidden">
+            <div class="h-full transition-all duration-500
+                {% if embed_percent >= 95 %}bg-gradient-to-r from-green-500 to-green-400
+                {% elif embed_percent >= 80 %}bg-gradient-to-r from-yellow-500 to-yellow-400
+                {% else %}bg-gradient-to-r from-red-500 to-red-400{% endif %}"
+                 style="width: {{ embed_percent }}%"></div>
+        </div>
+        <div class="flex justify-between mt-2 text-xs text-gray-500">
+            <span>{{ stats.chunks_with_embeddings }} embedded</span>
+            <span>{{ stats.chunks_without_embeddings }} pending</span>
+        </div>
+    </div>
+    
     <!-- Connection Status -->
     <div class="glass rounded-xl p-4">
         <h2 class="font-semibold mb-3 flex items-center gap-2">
@@ -111,6 +136,45 @@
                 <span class="text-sm text-gray-300">Supabase Connected</span>
             </div>
         </div>
+    </div>
+    
+    <!-- Quick Actions -->
+    <div class="grid grid-cols-3 gap-4">
+        <a href="/search" class="glass rounded-xl p-4 hover:bg-white/5 transition-colors group">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center group-hover:bg-cyan-500/30">
+                    <i data-lucide="search" class="w-5 h-5 text-cyan-400"></i>
+                </div>
+                <div>
+                    <p class="font-medium text-white">Search</p>
+                    <p class="text-xs text-gray-500">Find knowledge</p>
+                </div>
+            </div>
+        </a>
+        
+        <button @click="showAddModal = true" class="glass rounded-xl p-4 hover:bg-white/5 transition-colors group text-left">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center group-hover:bg-purple-500/30">
+                    <i data-lucide="plus" class="w-5 h-5 text-purple-400"></i>
+                </div>
+                <div>
+                    <p class="font-medium text-white">Add Source</p>
+                    <p class="text-xs text-gray-500">URL or document</p>
+                </div>
+            </div>
+        </button>
+        
+        <a href="/sources" class="glass rounded-xl p-4 hover:bg-white/5 transition-colors group">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center group-hover:bg-green-500/30">
+                    <i data-lucide="database" class="w-5 h-5 text-green-400"></i>
+                </div>
+                <div>
+                    <p class="font-medium text-white">Sources</p>
+                    <p class="text-xs text-gray-500">{{ stats.total_sources }} indexed</p>
+                </div>
+            </div>
+        </a>
     </div>
     
     <!-- Recent Sources -->
