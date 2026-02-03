@@ -48,18 +48,22 @@
 
 ## Future Improvements
 
-### High Priority
-- [ ] Source refresh/re-crawl action
-- [ ] Better error messages in UI
-- [ ] Progress bar for long operations
-- [ ] Chunk preview in search results
+### High Priority ✅
+- [x] Source refresh/re-crawl action
+- [x] Progress bar for long operations (Toast)
+- [x] Chunk preview in search results (with expand)
+- [x] Query term highlighting
 
-### Medium Priority
-- [ ] Tags for sources
-- [ ] Search filters (by source, date)
-- [ ] Export search results
+### Medium Priority ✅
+- [x] Tags for sources (add/remove/filter)
+- [x] Search filters (threshold)
+- [x] Type filter (All/Web/Documents)
+- [x] Export search results (JSON/Markdown/CSV)
+- [x] Source details page (with all chunks)
+
+### Still TODO
+- [ ] Better error messages in UI
 - [ ] Batch delete/operations
-- [ ] Source details page
 
 ### Low Priority
 - [ ] Multiple embedding models

@@ -2,6 +2,27 @@
 
 All notable changes to OpenClaw Knowledgebase.
 
+## [0.2.0] - 2026-02-03
+
+### Added
+- **Source Refresh** - Re-crawl URLs with one click
+- **Progress Toast** - Real-time job progress in bottom-right corner
+- **Search Highlighting** - Query terms highlighted in results
+- **Expand Content** - Long chunks can be expanded inline
+- **Tags for Sources** - Add, remove, filter by tags
+- **Type Filter** - Filter sources by All/Web/Documents
+- **Tag Dropdown** - Filter sources by specific tag
+- **Search Threshold** - Adjustable minimum similarity (30-70%)
+- **Export Results** - Download as JSON, Markdown, or CSV
+- **Source Detail Page** - View all chunks with metadata
+
+### Improved
+- Better search results display with source_id reference
+- Chunk count and char count in search results
+- Clickable source titles link to detail page
+
+---
+
 ## [0.1.0] - 2026-02-03
 
 ### Added
