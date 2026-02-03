@@ -168,8 +168,14 @@
             
             <!-- Stats -->
             <div class="flex items-center gap-4 text-xs text-gray-500">
+                {% if source.metadata and source.metadata.pages_crawled %}
                 <span class="flex items-center gap-1">
-                    <i data-lucide="file-text" class="w-3 h-3"></i>
+                    <i data-lucide="globe" class="w-3 h-3"></i>
+                    {{ source.metadata.pages_crawled }} pages
+                </span>
+                {% endif %}
+                <span class="flex items-center gap-1">
+                    <i data-lucide="layers" class="w-3 h-3"></i>
                     {{ source.chunk_count or 0 }} chunks
                 </span>
                 {% if source.created_at %}
