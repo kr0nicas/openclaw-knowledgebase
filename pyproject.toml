@@ -1,14 +1,14 @@
 [project]
 name = "openclaw-knowledgebase"
-version = "0.1.0"
-description = "Self-hosted RAG system with Ollama embeddings and Supabase/pgvector"
+version = "0.2.0"
+description = "Self-hosted RAG system with multi-agent memory, pluggable embeddings, and Supabase/pgvector"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.11"
 authors = [
     { name = "OpenClaw Community" }
 ]
-keywords = ["rag", "embeddings", "ollama", "supabase", "pgvector", "ai", "knowledge-base"]
+keywords = ["rag", "embeddings", "ollama", "openai", "google", "supabase", "pgvector", "ai", "knowledge-base", "multi-agent"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -51,10 +51,10 @@ dev = [
 kb = "knowledgebase.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/f2daz/openclaw-knowledgebase"
-Documentation = "https://github.com/f2daz/openclaw-knowledgebase#readme"
-Repository = "https://github.com/f2daz/openclaw-knowledgebase"
-Issues = "https://github.com/f2daz/openclaw-knowledgebase/issues"
+Homepage = "https://github.com/kr0nicas/openclaw-knowledgebase"
+Documentation = "https://github.com/kr0nicas/openclaw-knowledgebase#readme"
+Repository = "https://github.com/kr0nicas/openclaw-knowledgebase"
+Issues = "https://github.com/kr0nicas/openclaw-knowledgebase/issues"
 
 [build-system]
 requires = ["hatchling"]

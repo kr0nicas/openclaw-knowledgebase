@@ -15,7 +15,7 @@ from fastapi.templating import Jinja2Templates
 
 from knowledgebase.client import KnowledgeBase
 from knowledgebase.config import get_config
-from knowledgebase.embeddings import test_ollama_connection, get_embedding
+from knowledgebase.embeddings import test_connection as test_ollama_connection, get_embedding
 from knowledgebase.search import search, search_hybrid
 
 # Job tracking (in-memory, resets on restart)

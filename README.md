@@ -158,6 +158,7 @@ kb find "query"        # Semantic search
 kb find "query" --hybrid   # Hybrid search
 kb sources             # List all sources
 kb embed               # Generate embeddings for new chunks
+kb providers           # List available embedding providers
 kb serve               # Start web UI on port 8080
 kb serve -p 3000       # Custom port
 ```
@@ -202,9 +203,14 @@ Environment variables (`.env`):
 | `SUPABASE_URL` | Supabase REST API URL | Required |
 | `SUPABASE_KEY` | Supabase service_role key | Required |
 | `TABLE_PREFIX` | Table name prefix | `kb` |
-| `OLLAMA_URL` | Ollama API URL | `http://localhost:11434` |
-| `EMBEDDING_MODEL` | Ollama embedding model | `nomic-embed-text` |
+| `EMBEDDING_PROVIDER` | Provider: ollama, google, openai, custom | `ollama` |
+| `EMBEDDING_MODEL` | Model name (provider-specific) | `nomic-embed-text` |
 | `EMBEDDING_DIMENSIONS` | Vector dimensions | `768` |
+| `EMBEDDING_TIMEOUT` | Request timeout (seconds) | `120` |
+| `OLLAMA_URL` | Ollama API URL | `http://localhost:11434` |
+| `GOOGLE_API_KEY` | Google AI API key | — |
+| `OPENAI_API_KEY` | OpenAI API key | — |
+| `OPENAI_BASE_URL` | OpenAI-compatible base URL | `https://api.openai.com/v1` |
 | `CHUNK_SIZE` | Characters per chunk | `1000` |
 | `CHUNK_OVERLAP` | Overlap between chunks | `200` |
 | `OPENCLAW_AGENT_NAME` | Agent identity (for memory module) | Auto-generated |
@@ -251,15 +257,68 @@ python3 skills/bootstrap/bootstrap.py all
 
 This validates the environment, applies schemas, registers the agent, grants RAG access, and runs a smoke test.
 
-## Embedding Models
+## Embedding Providers
 
-| Model | Dimensions | Speed | Quality | Notes |
-|-------|-----------|-------|---------|-------|
-| `nomic-embed-text` | 768 | Fast | Good | **Default**, best balance |
-| `mxbai-embed-large` | 1024 | Medium | High | Better quality, slower |
-| `all-minilm` | 384 | Fastest | Fair | Lightweight option |
+Set `EMBEDDING_PROVIDER` in `.env` to switch providers. Each provider has its own configuration.
 
-Changing models requires updating `EMBEDDING_MODEL` and `EMBEDDING_DIMENSIONS` in `.env`, then re-embedding all content. The vector column dimensions are hardcoded in the schema and must be altered manually.
+### Ollama (default, local)
+
+```env
+EMBEDDING_PROVIDER=ollama
+EMBEDDING_MODEL=nomic-embed-text
+EMBEDDING_DIMENSIONS=768
+OLLAMA_URL=http://localhost:11434
+```
+
+| Model | Dimensions | Speed | Notes |
+|-------|-----------|-------|-------|
+| `nomic-embed-text` | 768 | Fast | **Default**, best balance |
+| `mxbai-embed-large` | 1024 | Medium | Higher quality |
+| `all-minilm` | 384 | Fastest | Lightweight |
+
+### Google AI
+
+```env
+EMBEDDING_PROVIDER=google
+EMBEDDING_MODEL=text-embedding-004
+EMBEDDING_DIMENSIONS=768
+GOOGLE_API_KEY=AIza...
+```
+
+Google's `text-embedding-004` supports configurable output dimensions (default 768). Free tier includes 1,500 requests/minute.
+
+### OpenAI
+
+```env
+EMBEDDING_PROVIDER=openai
+EMBEDDING_MODEL=text-embedding-3-small
+EMBEDDING_DIMENSIONS=1536
+OPENAI_API_KEY=sk-...
+```
+
+| Model | Dimensions | Notes |
+|-------|-----------|-------|
+| `text-embedding-3-small` | 1536 | Cost-effective |
+| `text-embedding-3-large` | 3072 | Highest quality |
+
+Both support `EMBEDDING_DIMENSIONS` to reduce output size (e.g. 768 for schema compatibility).
+
+### Custom (OpenAI-compatible)
+
+Any API that implements the OpenAI `/v1/embeddings` endpoint (vLLM, LiteLLM, LocalAI, etc.):
+
+```env
+EMBEDDING_PROVIDER=custom
+EMBEDDING_MODEL=your-model
+OPENAI_API_KEY=your-key
+OPENAI_BASE_URL=http://localhost:8000/v1
+```
+
+### Important: Changing providers
+
+- Changing `EMBEDDING_MODEL` or `EMBEDDING_DIMENSIONS` requires re-embedding all existing content (`kb embed`)
+- If the new dimensions differ from 768, the `vector(768)` columns in `schema.sql` and `schema_memory.sql` must be altered manually
+- Embeddings from different models are **not compatible** — you cannot mix providers within the same table
 
 ## License
 
