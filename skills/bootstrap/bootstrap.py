@@ -56,8 +56,20 @@ def heading(msg: str) -> None:
 
 
 def get_env() -> dict:
-    """Load and return environment variables."""
+    """Load and return environment variables.
+
+    Also invalidates the knowledgebase config cache so that any
+    subsequent call to get_config() picks up the freshly loaded values.
+    """
     load_dotenv(ENV_PATH, override=True)
+
+    # Invalidate config singleton — avoids stale cached defaults
+    try:
+        from knowledgebase.config import _config_cache
+        _config_cache["reload"] = True
+    except ImportError:
+        pass
+
     return {
         "SUPABASE_URL": os.getenv("SUPABASE_URL", "").rstrip("/"),
         "SUPABASE_KEY": os.getenv("SUPABASE_KEY", ""),
@@ -174,7 +186,7 @@ def step_validate() -> bool:
         fail(f"Supabase error: {e}")
         all_ok = False
 
-    # Test embedding provider
+    # Test embedding provider (config is reloaded by get_env() above)
     from knowledgebase.embeddings import test_connection, get_provider
 
     provider_name = env["EMBEDDING_PROVIDER"]
