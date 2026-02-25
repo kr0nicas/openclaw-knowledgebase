@@ -32,7 +32,7 @@ class Chunk:
     id: int | str  # Can be int or UUID
     source_id: int | str
     content: str
-    chunk_index: int = 0  # Archon schema uses chunk_index
+    chunk_index: int = 0
     metadata: dict | None = None
     embedding: list[float] | None = None
     similarity: float | None = None

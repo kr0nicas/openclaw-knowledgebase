@@ -1,370 +1,278 @@
-# 🦞 OpenClaw Knowledgebase
+# OpenClaw Knowledgebase
 
-A self-hosted RAG (Retrieval-Augmented Generation) system using **Ollama** for local embeddings and **Supabase/pgvector** for vector storage.
+A self-hosted RAG system with **multi-agent shared memory**. Uses Ollama for local embeddings and Supabase/pgvector for vector storage.
 
-**100% local. 100% free. No OpenAI API needed.**
+100% local. 100% free. No OpenAI API needed.
 
-## ✨ Features
+## What it does
 
-- 🔒 **Fully Local** - Embeddings via Ollama, self-hosted Supabase
-- 💸 **Zero Cost** - No API fees, runs on your hardware
-- 🔍 **Hybrid Search** - Semantic + keyword search combined
-- 🌐 **Web UI** - Beautiful dashboard with live search
-- 📄 **Multi-Format** - PDF, Word, Excel, PowerPoint, CSV, JSON, Markdown...
-- ⚡ **Fast** - ~4 embeddings/second on Apple Silicon
-- 🧩 **OpenClaw Ready** - Designed for [OpenClaw](https://github.com/openclaw/openclaw) AI agents
+- **RAG Pipeline** — Crawl URLs, upload documents (PDF, Word, Excel, etc.), chunk text, generate embeddings, and search by semantic similarity
+- **Multi-Agent Memory** — Agents register with unique identities, store memories (episodic, semantic, procedural), and share knowledge across teams
+- **Unified Search** — Query both agent memories and RAG knowledge bases in a single call
+- **Scoped Access** — Private, team, and global visibility controls with Row-Level Security
 
-## 📸 Screenshots
+## Architecture
 
-<details>
-<summary>Dashboard</summary>
+```
+┌──────────────────────────────────────────┐
+│           OpenClaw Agents                │
+│  agent-a         agent-b       agent-c   │
+└─────┬──────────────┬──────────────┬──────┘
+      │              │              │
+      ▼              ▼              ▼
+┌──────────────────────────────────────────┐
+│          AgentMemory (Python)            │
+│  remember() / recall() / recall_all()    │
+│  ┌──────────────┐  ┌──────────────────┐  │
+│  │  mb_memory   │  │  KnowledgeBase   │  │
+│  │  (agent mem) │  │  (RAG chunks)    │  │
+│  └──────┬───────┘  └────────┬─────────┘  │
+└─────────┼────────────────────┼───────────┘
+          │                    │
+   ┌──────▼────────────────────▼──────┐
+   │      Supabase + pgvector         │
+   │  mb_agents │ mb_memory │ mb_teams│
+   │  kb_sources│ kb_chunks │ RLS     │
+   └──────────────────┬───────────────┘
+                      │
+               ┌──────▼──────┐
+               │   Ollama    │
+               │  (embeddings│
+               │   768-dim)  │
+               └─────────────┘
+```
 
-The dashboard shows stats, connection status, and recent sources at a glance.
-</details>
-
-<details>
-<summary>Search</summary>
-
-Live semantic search with hybrid mode option. Results show similarity scores and content previews.
-</details>
-
-<details>
-<summary>Add Knowledge</summary>
-
-Add sources by crawling URLs or uploading documents. Supports depth control for web crawling.
-</details>
-
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
 - Python 3.11+
-- [Ollama](https://ollama.ai) running locally or on your network
+- [Ollama](https://ollama.ai) running locally
 - [Supabase](https://supabase.com) (self-hosted or cloud) with pgvector
 
-### Installation
+### Install
 
 ```bash
-# Clone the repo
-git clone https://github.com/f2daz/openclaw-knowledgebase.git
+git clone https://github.com/openclaw/openclaw-knowledgebase.git
 cd openclaw-knowledgebase
 
 # Install with uv (recommended)
 uv sync
 
-# Or with pip
-pip install -e .
-
-# For web UI
-pip install -e ".[web]"
-
-# For document parsing (PDF, DOCX, etc.)
-pip install -e ".[docling]"
-
-# For web crawling
-pip install -e ".[crawl]"
-
-# Everything
-pip install -e ".[all]"
+# Or with pip (pick what you need)
+pip install -e ".[all]"    # everything
+pip install -e ".[web]"    # web UI only
+pip install -e ".[docling]" # PDF/Office parsing
+pip install -e ".[crawl]"  # web crawling
 ```
 
 ### Setup
 
-1. **Pull the embedding model:**
 ```bash
+# 1. Pull the embedding model
 ollama pull nomic-embed-text
-```
 
-2. **Create the database schema:**
-```bash
-# Run schema.sql in your Supabase SQL editor
-# Or via psql:
-psql $DATABASE_URL -f schema.sql
-```
-
-3. **Configure environment:**
-```bash
+# 2. Configure environment
 cp .env.example .env
-# Edit .env with your Supabase URL, key, and Ollama URL
-```
+# Edit .env with your Supabase URL and key
 
-### First Run
+# 3. Apply database schema (in Supabase SQL Editor)
+#    Run schema.sql first, then schema_memory.sql
 
-```bash
-# Check everything is connected
-kb status
+# 4. Bootstrap an agent (validates, registers, tests)
+python3 skills/bootstrap/bootstrap.py all
 
-# Start the web UI
+# 5. Start the web UI
 kb serve
-
-# Open http://localhost:8080
 ```
 
-## 📖 CLI Reference
+## Agent Memory (Multi-Agent)
+
+Register agents, store memories with scoping, and share knowledge:
+
+```python
+from knowledgebase.memory import AgentMemory, Scope, MemoryType
+
+agent = AgentMemory("my-agent", api_key="oc_sk_...")
+agent.authenticate()
+
+# Store memories with different types and scopes
+agent.learn("API v3 requires OAuth2", scope=Scope.GLOBAL, tags=["api"])
+agent.log_event("Deploy succeeded at 14:30", scope=Scope.TEAM)
+agent.save_procedure("To deploy: tag → CI → approve → merge", scope=Scope.TEAM)
+
+# Search agent memories
+results = agent.recall("API authentication")
+
+# Unified search: memories + RAG knowledge bases
+combined = agent.recall_all("deployment process")
+
+# Share RAG sources with all agents
+agent.share_source(source_id=42, scope=Scope.GLOBAL)
+
+# Teams
+team = agent.create_team("backend", description="Backend team")
+agent.join_team(team.id)
+```
+
+### Memory Types
+
+| Type | Use for | Example |
+|------|---------|---------|
+| `semantic` | Facts, learnings, knowledge | "The payments API uses OAuth2" |
+| `episodic` | Events, observations | "Deploy failed at 14:30 due to timeout" |
+| `procedural` | Workflows, how-tos | "To reset the cache: ssh → systemctl restart redis" |
+
+### Scopes
+
+| Scope | Visible to |
+|-------|-----------|
+| `private` | Only the owning agent |
+| `team` | Agents in shared teams |
+| `global` | All registered agents |
+
+## RAG Pipeline
+
+The original knowledgebase functionality works standalone or alongside agent memory:
+
+```python
+from knowledgebase import KnowledgeBase, search, search_hybrid
+
+# Quick search
+results = search("home assistant automation", limit=5)
+
+# Hybrid search (semantic + keyword)
+results = search_hybrid("zigbee pairing", limit=5)
+
+# Full client
+kb = KnowledgeBase()
+source = kb.add_source(url="https://docs.example.com", title="Docs")
+kb.add_chunk(source_id=source.id, content="...", chunk_index=0)
+```
+
+## CLI
 
 ```bash
-# Status & Health
-kb status              # Check connections, show stats
-
-# Search
+kb status              # Check connections and stats
 kb find "query"        # Semantic search
-kb find "query" --hybrid   # Hybrid search (semantic + keyword)
-kb find "query" -n 20  # More results
-kb find "query" -t 0.3 # Lower similarity threshold
-
-# Sources
+kb find "query" --hybrid   # Hybrid search
 kb sources             # List all sources
-
-# Embeddings
 kb embed               # Generate embeddings for new chunks
-kb embed --batch-size 100  # Larger batches
-
-# Web UI
-kb serve               # Start on port 8080
+kb serve               # Start web UI on port 8080
 kb serve -p 3000       # Custom port
-kb serve --reload      # Dev mode with auto-reload
 ```
 
-## 📄 Supported Formats
+## Web UI
 
-### Native (no dependencies)
-| Format | Extensions | Notes |
-|--------|------------|-------|
-| Plain Text | `.txt` | As-is |
-| Markdown | `.md`, `.markdown` | Header-aware chunking |
-| reStructuredText | `.rst` | Python docs format |
-| JSON | `.json` | Formatted code block |
-| YAML | `.yaml`, `.yml` | Formatted code block |
-| CSV | `.csv` | Converted to Markdown table |
-| TSV | `.tsv` | Converted to Markdown table |
+Start with `kb serve` and open http://localhost:8080.
 
-### With Docling (`pip install .[docling]`)
-| Format | Extensions | Notes |
-|--------|------------|-------|
-| PDF | `.pdf` | Full text extraction, tables, images |
-| Word | `.docx`, `.doc` | Preserves structure |
-| PowerPoint | `.pptx`, `.ppt` | Slide content |
-| Excel | `.xlsx`, `.xls` | Sheet content |
-| HTML | `.html`, `.htm` | Cleaned content |
-
-### Web Crawling (`pip install .[crawl]`)
-- Single page or recursive crawling
-- Configurable depth (0-3 levels)
-- Same-domain restriction
-- Rate limiting
-- Sitemap support
-
-## 🌐 Web UI
-
-Start the web interface:
-
-```bash
-kb serve
-```
-
-Open http://localhost:8080
-
-### Features
-
-- **Dashboard** - Stats overview, connection status, recent sources
-- **Search** - Live semantic search with HTMX, hybrid mode toggle
-- **Sources** - Browse, delete sources
-- **Add Knowledge** - Crawl URLs or upload documents
-- **Settings** - View configuration, CLI reference
+- **Dashboard** — Stats, connection status, recent sources
+- **Search** — Live semantic search with hybrid mode
+- **Sources** — Browse and manage ingested content
+- **Add Knowledge** — Crawl URLs or upload documents
 
 ### API Endpoints
 
-```bash
-# Health check
-GET /api/health
-
-# Search
-GET /api/search?q=query&hybrid=false&limit=10
-
-# Stats
-GET /api/stats
-
-# Sources
-GET /api/sources
-DELETE /api/sources/{id}
-
-# Ingestion
-POST /api/crawl    # Form: url, max_depth, title
-POST /api/upload   # Form: file, title
-
-# Jobs
-GET /api/jobs
-GET /api/jobs/{id}
+```
+GET  /api/health          # Health check
+GET  /api/search?q=...    # Search (supports hybrid, limit params)
+GET  /api/stats           # Knowledgebase statistics
+GET  /api/sources         # List sources
+DELETE /api/sources/{id}  # Delete a source
+POST /api/crawl           # Crawl a URL (form: url, max_depth, title)
+POST /api/upload          # Upload a document (form: file, title)
+GET  /api/jobs            # List background jobs
+GET  /api/jobs/{id}       # Job status
 ```
 
-## 🔌 Python API
+## Supported Formats
 
-```python
-from knowledgebase import search, search_hybrid, KnowledgeBase
+**Native** (no extra dependencies): TXT, Markdown, RST, JSON, YAML, CSV, TSV
 
-# Quick semantic search
-results = search("home assistant automation", limit=5)
-for r in results:
-    print(f"[{r['similarity']:.2f}] {r['title']}")
-    print(f"  {r['content'][:200]}...")
+**With Docling** (`pip install .[docling]`): PDF, Word (.docx), PowerPoint (.pptx), Excel (.xlsx), HTML
 
-# Hybrid search (better for specific terms)
-results = search_hybrid("zigbee pairing mode", limit=5)
+**Web Crawling** (`pip install .[crawl]`): Recursive crawling with depth control, rate limiting, same-domain restriction
 
-# Full client access
-kb = KnowledgeBase()
-stats = kb.stats()
-sources = kb.list_sources()
-
-# Add content programmatically
-source = kb.add_source(
-    url="https://docs.example.com",
-    title="Example Docs",
-    source_type="web"
-)
-
-kb.add_chunk(
-    source_id=source.id,
-    content="Your text content here...",
-    chunk_index=0,
-    metadata={"section": "intro"}
-)
-```
-
-## ⚙️ Configuration
+## Configuration
 
 Environment variables (`.env`):
 
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `SUPABASE_URL` | Supabase REST API URL | Required |
-| `SUPABASE_KEY` | Supabase service key | Required |
+| `SUPABASE_KEY` | Supabase service_role key | Required |
 | `TABLE_PREFIX` | Table name prefix | `kb` |
 | `OLLAMA_URL` | Ollama API URL | `http://localhost:11434` |
-| `EMBEDDING_MODEL` | Ollama model | `nomic-embed-text` |
-| `EMBEDDING_DIM` | Vector dimensions | `768` |
+| `EMBEDDING_MODEL` | Ollama embedding model | `nomic-embed-text` |
+| `EMBEDDING_DIMENSIONS` | Vector dimensions | `768` |
 | `CHUNK_SIZE` | Characters per chunk | `1000` |
 | `CHUNK_OVERLAP` | Overlap between chunks | `200` |
+| `OPENCLAW_AGENT_NAME` | Agent identity (for memory module) | Auto-generated |
+| `OPENCLAW_AGENT_KEY` | Agent API key (for memory module) | Generated on bootstrap |
 
-> **Tip:** Use `TABLE_PREFIX=jarvis` if you have existing `jarvis_sources`/`jarvis_chunks` tables from Archon.
+## Database Schema
 
-## 🗄️ Database Schema
-
-Two main tables (with configurable prefix):
+### RAG Tables (`kb_*`)
 
 ```sql
--- Sources: tracked URLs/documents
-{prefix}_sources (
-    id UUID PRIMARY KEY,
-    url TEXT UNIQUE,
-    title TEXT,
-    source_type TEXT,  -- 'web', 'document'
-    metadata JSONB,
-    created_at TIMESTAMP
-)
-
--- Chunks: text segments with embeddings
-{prefix}_chunks (
-    id SERIAL PRIMARY KEY,
-    source_id UUID REFERENCES {prefix}_sources,
-    chunk_index INTEGER,
-    content TEXT,
-    metadata JSONB,
-    embedding vector(768),
-    created_at TIMESTAMP
-)
+kb_sources (id, url, title, source_type, metadata, created_at)
+kb_chunks  (id, source_id, url, chunk_index, content, embedding vector(768))
 ```
 
-Search functions (if using provided schema):
-- `{prefix}_search_semantic()` - Vector similarity search
-- `{prefix}_search_hybrid()` - Combined semantic + keyword
+### Memory Tables (`mb_*`)
 
-## 🧩 OpenClaw Integration
+```sql
+mb_agents       (id, name, agent_type, api_key_hash, metadata)
+mb_memory       (id, agent_id, memory_type, scope, content, embedding, tags[], namespace, importance)
+mb_teams        (id, name, description, created_by)
+mb_team_members (team_id, agent_id, role)
+mb_kb_access    (source_id, agent_id, team_id, scope, permission)
+```
 
-### As a Skill
+### RPC Functions
 
-Copy the skill to your OpenClaw workspace:
+| Function | Purpose |
+|----------|---------|
+| `kb_search_semantic()` | Vector similarity search on RAG chunks |
+| `kb_search_hybrid()` | Combined semantic + keyword search |
+| `mb_register_agent()` | Register a new agent |
+| `mb_authenticate_agent()` | Validate agent API key |
+| `mb_search_memory()` | Search agent memories with scope filtering |
+| `mb_search_all()` | Unified search across memories + RAG |
+| `mb_bootstrap_agent_access()` | Grant agent access to all existing sources |
+
+## Agent Bootstrap (Skill)
+
+New agents can self-configure by reading `skills/bootstrap/instructions.md`:
 
 ```bash
-cp -r skills/knowledgebase ~/clawd/skills/
+python3 skills/bootstrap/bootstrap.py all
 ```
 
-The agent can then search your knowledge base before answering questions.
+This validates the environment, applies schemas, registers the agent, grants RAG access, and runs a smoke test.
 
-### Direct Integration
-
-```python
-# In your agent code
-from knowledgebase import search
-
-def answer_with_context(question: str) -> str:
-    # Search knowledge base
-    results = search(question, limit=3)
-    
-    # Build context from results
-    context = "\n\n".join([
-        f"Source: {r['title']}\n{r['content']}"
-        for r in results
-    ])
-    
-    # Use context in your prompt
-    return f"Based on:\n{context}\n\nAnswer: {question}"
-```
-
-## 📊 Embedding Models
+## Embedding Models
 
 | Model | Dimensions | Speed | Quality | Notes |
 |-------|-----------|-------|---------|-------|
-| `nomic-embed-text` | 768 | ⚡⚡⚡ | ⭐⭐⭐ | **Default**, best balance |
-| `mxbai-embed-large` | 1024 | ⚡⚡ | ⭐⭐⭐⭐ | Higher quality |
-| `all-minilm` | 384 | ⚡⚡⚡⚡ | ⭐⭐ | Fastest, lower quality |
-| `snowflake-arctic-embed` | 1024 | ⚡⚡ | ⭐⭐⭐⭐ | Good for technical docs |
+| `nomic-embed-text` | 768 | Fast | Good | **Default**, best balance |
+| `mxbai-embed-large` | 1024 | Medium | High | Better quality, slower |
+| `all-minilm` | 384 | Fastest | Fair | Lightweight option |
 
-To change models, update `EMBEDDING_MODEL` and `EMBEDDING_DIM` in `.env`, then re-embed your content.
+Changing models requires updating `EMBEDDING_MODEL` and `EMBEDDING_DIMENSIONS` in `.env`, then re-embedding all content. The vector column dimensions are hardcoded in the schema and must be altered manually.
 
-## 🔧 Troubleshooting
-
-### "No results found"
-- Check if embeddings exist: `kb status`
-- Lower the threshold: `kb find "query" -t 0.3`
-- Try hybrid search: `kb find "query" --hybrid`
-
-### "Ollama connection failed"
-- Ensure Ollama is running: `ollama serve`
-- Check the URL in `.env`
-- Pull the model: `ollama pull nomic-embed-text`
-
-### "Supabase connection failed"
-- Verify `SUPABASE_URL` and `SUPABASE_KEY`
-- Ensure pgvector extension is enabled
-- Check if tables exist (run `schema.sql`)
-
-### Slow PDF processing
-- First PDF triggers Docling model download (~500MB)
-- Subsequent PDFs are faster
-- Large PDFs may take 30-60 seconds
-
-## 🤝 Contributing
-
-PRs welcome! Please:
-1. Open an issue first for larger changes
-2. Follow existing code style
-3. Add tests for new features
-4. Update docs as needed
-
-## 📄 License
+## License
 
 MIT License - see [LICENSE](LICENSE)
 
-## 🙏 Credits
+## Credits
 
-- [Ollama](https://ollama.ai) - Local LLM inference
-- [Supabase](https://supabase.com) - Postgres + pgvector
-- [Docling](https://github.com/DS4SD/docling) - Document parsing (IBM)
-- [OpenClaw](https://github.com/openclaw/openclaw) - AI agent framework
-- [HTMX](https://htmx.org) - Web UI interactions
-- [Tailwind CSS](https://tailwindcss.com) - Styling
+- [Ollama](https://ollama.ai) — Local LLM inference
+- [Supabase](https://supabase.com) — Postgres + pgvector
+- [Docling](https://github.com/DS4SD/docling) — Document parsing (IBM)
+- [HTMX](https://htmx.org) — Web UI interactions
+- [Tailwind CSS](https://tailwindcss.com) — Styling
 
 ---
 
-Built with 🦞 by the OpenClaw community
+Built by the OpenClaw community

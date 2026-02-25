@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS kb_chunks (
     id SERIAL PRIMARY KEY,
     source_id INTEGER REFERENCES kb_sources(id) ON DELETE CASCADE,
     url TEXT NOT NULL,
-    chunk_index INTEGER NOT NULL,  -- Archon-compatible naming
+    chunk_index INTEGER NOT NULL,
     title TEXT,
     summary TEXT,
     content TEXT NOT NULL,

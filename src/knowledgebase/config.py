@@ -14,7 +14,7 @@ class Config:
     # Supabase
     supabase_url: str = ""
     supabase_key: str = ""
-    table_prefix: str = "kb"  # Table prefix: kb_sources, kb_chunks (or jarvis_, etc.)
+    table_prefix: str = "kb"  # Table prefix: kb_sources, kb_chunks
     
     # Ollama
     ollama_url: str = "http://localhost:11434"
@@ -29,6 +29,10 @@ class Config:
     default_match_count: int = 10
     similarity_threshold: float = 0.5
     semantic_weight: float = 0.7
+
+    # OpenClaw Memory Module (optional — empty = legacy single-tenant mode)
+    agent_name: str = ""
+    agent_api_key: str = ""
     
     @classmethod
     def from_env(cls, env_file: str | Path | None = None) -> "Config":
@@ -50,6 +54,8 @@ class Config:
             default_match_count=int(os.getenv("DEFAULT_MATCH_COUNT", "10")),
             similarity_threshold=float(os.getenv("SIMILARITY_THRESHOLD", "0.5")),
             semantic_weight=float(os.getenv("SEMANTIC_WEIGHT", "0.7")),
+            agent_name=os.getenv("OPENCLAW_AGENT_NAME", ""),
+            agent_api_key=os.getenv("OPENCLAW_AGENT_KEY", ""),
         )
     
     def validate(self) -> list[str]:
