@@ -56,33 +56,63 @@ def heading(msg: str) -> None:
 
 
 def get_env() -> dict:
-    """Load and return environment variables.
+    """Load .env and force the knowledgebase config to use those values.
 
-    Also invalidates the knowledgebase config cache so that any
-    subsequent call to get_config() picks up the freshly loaded values.
+    This is the single source of truth for configuration in the bootstrap.
+    It loads the .env file, then EXPLICITLY sets every variable in os.environ
+    and replaces the global Config singleton, bypassing any caching or
+    double-load_dotenv issues in the library code.
     """
     load_dotenv(ENV_PATH, override=True)
 
-    # Invalidate config singleton — avoids stale cached defaults
-    try:
-        from knowledgebase.config import _config_cache
-        _config_cache["reload"] = True
-    except ImportError:
-        pass
-
-    return {
+    # Read all values from os.environ (now populated by load_dotenv)
+    env = {
         "SUPABASE_URL": os.getenv("SUPABASE_URL", "").rstrip("/"),
         "SUPABASE_KEY": os.getenv("SUPABASE_KEY", ""),
         "OLLAMA_URL": os.getenv("OLLAMA_URL", "http://localhost:11434"),
         "EMBEDDING_MODEL": os.getenv("EMBEDDING_MODEL", "nomic-embed-text"),
-        "TABLE_PREFIX": os.getenv("TABLE_PREFIX", "kb"),
+        "EMBEDDING_DIMENSIONS": os.getenv("EMBEDDING_DIMENSIONS", "768"),
+        "EMBEDDING_TIMEOUT": os.getenv("EMBEDDING_TIMEOUT", "120"),
         "EMBEDDING_PROVIDER": os.getenv("EMBEDDING_PROVIDER", "ollama"),
+        "TABLE_PREFIX": os.getenv("TABLE_PREFIX", "kb"),
         "GOOGLE_API_KEY": os.getenv("GOOGLE_API_KEY", ""),
         "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY", ""),
         "OPENAI_BASE_URL": os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
         "OPENCLAW_AGENT_NAME": os.getenv("OPENCLAW_AGENT_NAME", ""),
         "OPENCLAW_AGENT_KEY": os.getenv("OPENCLAW_AGENT_KEY", ""),
     }
+
+    # Force-set os.environ so ANY subsequent os.getenv() sees these values,
+    # regardless of what load_dotenv() calls happen later in library code.
+    for key, val in env.items():
+        if val:
+            os.environ[key] = val
+
+    # Build a Config object directly from the env dict and inject it as
+    # the global singleton. This completely bypasses Config.from_env()
+    # and its own load_dotenv() call, eliminating all caching/ordering bugs.
+    try:
+        from knowledgebase.config import Config, set_config
+        config = Config(
+            supabase_url=env["SUPABASE_URL"],
+            supabase_key=env["SUPABASE_KEY"],
+            table_prefix=env["TABLE_PREFIX"],
+            embedding_provider=env["EMBEDDING_PROVIDER"],
+            embedding_model=env["EMBEDDING_MODEL"],
+            embedding_dimensions=int(env["EMBEDDING_DIMENSIONS"]),
+            embedding_timeout=int(env["EMBEDDING_TIMEOUT"]),
+            ollama_url=env["OLLAMA_URL"],
+            google_api_key=env["GOOGLE_API_KEY"],
+            openai_api_key=env["OPENAI_API_KEY"],
+            openai_base_url=env["OPENAI_BASE_URL"],
+            agent_name=env["OPENCLAW_AGENT_NAME"],
+            agent_api_key=env["OPENCLAW_AGENT_KEY"],
+        )
+        set_config(config)
+    except ImportError:
+        pass
+
+    return env
 
 
 def supabase_headers(env: dict) -> dict:
@@ -186,11 +216,15 @@ def step_validate() -> bool:
         fail(f"Supabase error: {e}")
         all_ok = False
 
-    # Test embedding provider (config is reloaded by get_env() above)
+    # Test embedding provider (config injected by get_env() above)
     from knowledgebase.embeddings import test_connection, get_provider
+    from knowledgebase.config import get_config
 
+    # Verify the config singleton has the right provider
+    active_config = get_config()
     provider_name = env["EMBEDDING_PROVIDER"]
     model = env["EMBEDDING_MODEL"]
+    ok(f"Provider configured: {provider_name} (config sees: {active_config.embedding_provider})")
     ok_msg = f"Provider: {provider_name} / Model: {model}"
 
     # Validate provider-specific keys before testing connection
