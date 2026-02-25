@@ -18,7 +18,15 @@ from pathlib import Path
 
 # Ensure project root is in path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT / "src"))
+SRC_ROOT = PROJECT_ROOT / "src"
+sys.path.insert(0, str(SRC_ROOT))
+
+# Clear __pycache__ to prevent stale bytecode from overriding source changes.
+# This is critical when the repo is updated via git pull but Python serves
+# old .pyc files from a previous run.
+import shutil
+for cache_dir in SRC_ROOT.rglob("__pycache__"):
+    shutil.rmtree(cache_dir, ignore_errors=True)
 
 from dotenv import load_dotenv, set_key
 
@@ -170,10 +178,28 @@ def supabase_sql(env: dict, sql: str, timeout: int = 60):
 def step_validate() -> bool:
     """Validate environment and connections."""
     heading("Step 1: Validate Environment")
+
+    # ── Debug: show exactly what we're working with ──
+    print(f"  [debug] bootstrap.py mtime: {Path(__file__).stat().st_mtime:.0f}")
+    print(f"  [debug] ENV_PATH: {ENV_PATH} (exists: {ENV_PATH.exists()})")
+    print(f"  [debug] os.environ EMBEDDING_PROVIDER={os.environ.get('EMBEDDING_PROVIDER', '(NOT SET)')}")
+
     import requests
 
     env = get_env()
     all_ok = True
+
+    # ── Debug: show resolved values after get_env() ──
+    print(f"  [debug] after get_env(): EMBEDDING_PROVIDER={env.get('EMBEDDING_PROVIDER')}")
+    print(f"  [debug] after get_env(): EMBEDDING_MODEL={env.get('EMBEDDING_MODEL')}")
+    print(f"  [debug] after get_env(): GOOGLE_API_KEY={'set (' + str(len(env.get('GOOGLE_API_KEY', ''))) + ' chars)' if env.get('GOOGLE_API_KEY') else 'EMPTY'}")
+    print(f"  [debug] os.environ after: EMBEDDING_PROVIDER={os.environ.get('EMBEDDING_PROVIDER', '(NOT SET)')}")
+    try:
+        from knowledgebase.config import get_config
+        _c = get_config()
+        print(f"  [debug] config singleton: provider={_c.embedding_provider}, model={_c.embedding_model}")
+    except Exception as _e:
+        print(f"  [debug] config error: {_e}")
 
     # Check .env file
     if ENV_PATH.exists():
