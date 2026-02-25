@@ -64,6 +64,10 @@ def get_env() -> dict:
         "OLLAMA_URL": os.getenv("OLLAMA_URL", "http://localhost:11434"),
         "EMBEDDING_MODEL": os.getenv("EMBEDDING_MODEL", "nomic-embed-text"),
         "TABLE_PREFIX": os.getenv("TABLE_PREFIX", "kb"),
+        "EMBEDDING_PROVIDER": os.getenv("EMBEDDING_PROVIDER", "ollama"),
+        "GOOGLE_API_KEY": os.getenv("GOOGLE_API_KEY", ""),
+        "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY", ""),
+        "OPENAI_BASE_URL": os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
         "OPENCLAW_AGENT_NAME": os.getenv("OPENCLAW_AGENT_NAME", ""),
         "OPENCLAW_AGENT_KEY": os.getenv("OPENCLAW_AGENT_KEY", ""),
     }
@@ -170,27 +174,33 @@ def step_validate() -> bool:
         fail(f"Supabase error: {e}")
         all_ok = False
 
-    # Test Ollama connection
-    ollama_url = env["OLLAMA_URL"]
+    # Test embedding provider
+    from knowledgebase.embeddings import test_connection, get_provider
+
+    provider_name = env["EMBEDDING_PROVIDER"]
     model = env["EMBEDDING_MODEL"]
-    try:
-        resp = requests.get(f"{ollama_url}/api/tags", timeout=5)
-        if resp.status_code == 200:
-            ok(f"Ollama connection OK ({ollama_url})")
-            models = resp.json().get("models", [])
-            model_names = [m.get("name", "").split(":")[0] for m in models]
-            if model in model_names:
-                ok(f"Embedding model '{model}' available")
-            else:
-                fail(f"Model '{model}' not found. Run: ollama pull {model}")
-                all_ok = False
-        else:
-            fail(f"Ollama returned HTTP {resp.status_code}")
-            all_ok = False
-    except requests.exceptions.ConnectionError:
-        fail(f"Cannot connect to Ollama at {ollama_url}")
-        print(f"    Start Ollama with: ollama serve")
+    ok_msg = f"Provider: {provider_name} / Model: {model}"
+
+    # Validate provider-specific keys before testing connection
+    if provider_name == "google" and not env.get("GOOGLE_API_KEY"):
+        fail(f"EMBEDDING_PROVIDER=google but GOOGLE_API_KEY is empty")
         all_ok = False
+    elif provider_name in ("openai", "custom") and not env.get("OPENAI_API_KEY"):
+        fail(f"EMBEDDING_PROVIDER={provider_name} but OPENAI_API_KEY is empty")
+        all_ok = False
+
+    if all_ok:
+        provider_ok, provider_msg = test_connection()
+        if provider_ok:
+            ok(f"Embeddings OK — {ok_msg}")
+            ok(f"  {provider_msg}")
+        else:
+            fail(f"Embeddings FAILED — {ok_msg}")
+            fail(f"  {provider_msg}")
+            if provider_name == "ollama":
+                print(f"    Start Ollama with: ollama serve")
+                print(f"    Then: ollama pull {model}")
+            all_ok = False
 
     if all_ok:
         ok("All validations passed")
