@@ -8,33 +8,33 @@ from dotenv import load_dotenv
 
 
 def _load_env_cascade(local_env: str | Path | None = None) -> None:
-    """Load environment variables with workspace → project cascade.
+    """Load environment variables with cascade, never overriding existing.
 
-    Order (later overrides earlier):
-    1. Workspace .env (parent of project root, or OPENCLAW_WORKSPACE)
-    2. Project-local .env (passed explicitly or auto-discovered)
+    Priority (highest to lowest):
+    1. Existing os.environ (systemd, shell exports, container env)
+    2. Project-local .env
+    3. Workspace .env (parent of project root, or OPENCLAW_WORKSPACE)
 
-    This lets shared credentials (Supabase, API keys) live once in the
-    workspace .env while each project overrides only what it needs.
+    All layers use override=False: the first source that sets a variable
+    wins, and existing os.environ always takes precedence. This prevents
+    an empty value in a .env file from wiping a systemd-injected secret.
     """
-    # Resolve workspace root
+    # 1. Load project-local .env (fills gaps not in os.environ)
+    if local_env:
+        load_dotenv(local_env, override=False)
+    else:
+        load_dotenv(override=False)
+
+    # 2. Load workspace .env (fills any remaining gaps)
     workspace_dir = os.getenv("OPENCLAW_WORKSPACE")
     if workspace_dir:
         workspace_env = Path(workspace_dir) / ".env"
     else:
-        # Convention: workspace is the parent of the project root
         project_root = Path(__file__).resolve().parent.parent.parent
         workspace_env = project_root.parent / ".env"
 
-    # 1. Load workspace .env first (base layer, won't override existing)
     if workspace_env.is_file():
         load_dotenv(workspace_env, override=False)
-
-    # 2. Load project-local .env (overrides workspace values)
-    if local_env:
-        load_dotenv(local_env, override=True)
-    else:
-        load_dotenv(override=True)
 
 
 @dataclass

@@ -196,18 +196,22 @@ GET  /api/jobs/{id}       # Job status
 
 ## Configuration
 
-Environment variables are loaded in cascade: **workspace `.env` first, then project `.env`** (project overrides workspace). This lets shared credentials live in one place when running multiple projects under the same workspace.
+Environment variables are resolved with a three-layer cascade (highest priority first):
+
+1. **Existing environment** (systemd, shell exports, container env) — never overwritten
+2. **Project `.env`** — fills gaps not already in the environment
+3. **Workspace `.env`** (parent directory) — fills any remaining gaps
 
 ```
 /root/.openclaw/workspace/
 ├── .env                          ← shared: SUPABASE_URL, SUPABASE_KEY, API keys
 ├── openclaw-knowledgebase/
-│   └── .env                      ← overrides: OPENCLAW_AGENT_NAME, EMBEDDING_MODEL
+│   └── .env                      ← project-specific: OPENCLAW_AGENT_NAME, EMBEDDING_MODEL
 ├── another-project/
-│   └── .env                      ← its own overrides
+│   └── .env                      ← its own project-specific vars
 ```
 
-By default the workspace is the parent directory of the project root. Override with `OPENCLAW_WORKSPACE=/custom/path`.
+By default the workspace is the parent directory of the project root. Override with `OPENCLAW_WORKSPACE=/custom/path`. Secrets injected via systemd or container env are never overwritten by `.env` files.
 
 Variables (`.env`):
 

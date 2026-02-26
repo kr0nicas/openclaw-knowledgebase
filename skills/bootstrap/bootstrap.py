@@ -65,21 +65,23 @@ def heading(msg: str) -> None:
 
 
 def get_env() -> dict:
-    """Load .env and force the knowledgebase config to use those values.
+    """Load .env cascade and build the config singleton.
 
-    This is the single source of truth for configuration in the bootstrap.
-    It loads the .env file, then EXPLICITLY sets every variable in os.environ
-    and replaces the global Config singleton, bypassing any caching or
-    double-load_dotenv issues in the library code.
+    Priority (highest to lowest):
+    1. Existing os.environ (systemd, shell exports, container env)
+    2. Project-local .env
+    3. Workspace .env
+
+    All layers use override=False so existing env vars are never wiped.
     """
-    # Cascade: workspace .env (base) → project .env (overrides)
+    # Load project .env first (fills gaps), then workspace .env (fills rest)
+    load_dotenv(ENV_PATH, override=False)
     workspace_dir = os.getenv("OPENCLAW_WORKSPACE")
     ws_env = Path(workspace_dir) / ".env" if workspace_dir else WORKSPACE_ENV_PATH
     if ws_env.is_file():
         load_dotenv(ws_env, override=False)
-    load_dotenv(ENV_PATH, override=True)
 
-    # Read all values from os.environ (now populated by load_dotenv)
+    # Read resolved values from os.environ
     env = {
         "SUPABASE_URL": os.getenv("SUPABASE_URL", "").rstrip("/"),
         "SUPABASE_KEY": os.getenv("SUPABASE_KEY", ""),
@@ -95,12 +97,6 @@ def get_env() -> dict:
         "OPENCLAW_AGENT_NAME": os.getenv("OPENCLAW_AGENT_NAME", ""),
         "OPENCLAW_AGENT_KEY": os.getenv("OPENCLAW_AGENT_KEY", ""),
     }
-
-    # Force-set os.environ so ANY subsequent os.getenv() sees these values,
-    # regardless of what load_dotenv() calls happen later in library code.
-    for key, val in env.items():
-        if val:
-            os.environ[key] = val
 
     # Build a Config object directly from the env dict and inject it as
     # the global singleton. This completely bypasses Config.from_env()
