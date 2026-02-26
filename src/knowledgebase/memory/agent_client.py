@@ -17,7 +17,6 @@ Usage:
 
 from __future__ import annotations
 
-import logging
 from datetime import datetime
 from uuid import UUID
 
@@ -26,6 +25,7 @@ import requests
 from knowledgebase.client import Chunk, KnowledgeBase
 from knowledgebase.config import Config, get_config
 from knowledgebase.embeddings import get_embedding
+from knowledgebase.log import get_logger
 from knowledgebase.memory.models import (
     Agent,
     MemoryEntry,
@@ -35,7 +35,7 @@ from knowledgebase.memory.models import (
     Team,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class AgentMemory:

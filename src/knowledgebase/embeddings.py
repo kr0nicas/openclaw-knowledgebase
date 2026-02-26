@@ -18,15 +18,15 @@ Adding a new provider:
 from __future__ import annotations
 
 import abc
-import logging
 from dataclasses import dataclass
 from typing import Any
 
 import requests
 
 from knowledgebase.config import get_config
+from knowledgebase.log import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # ── Provider registry ────────────────────────────────────────────────
 

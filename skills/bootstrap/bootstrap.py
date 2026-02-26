@@ -179,27 +179,10 @@ def step_validate() -> bool:
     """Validate environment and connections."""
     heading("Step 1: Validate Environment")
 
-    # ── Debug: show exactly what we're working with ──
-    print(f"  [debug] bootstrap.py mtime: {Path(__file__).stat().st_mtime:.0f}")
-    print(f"  [debug] ENV_PATH: {ENV_PATH} (exists: {ENV_PATH.exists()})")
-    print(f"  [debug] os.environ EMBEDDING_PROVIDER={os.environ.get('EMBEDDING_PROVIDER', '(NOT SET)')}")
-
     import requests
 
     env = get_env()
     all_ok = True
-
-    # ── Debug: show resolved values after get_env() ──
-    print(f"  [debug] after get_env(): EMBEDDING_PROVIDER={env.get('EMBEDDING_PROVIDER')}")
-    print(f"  [debug] after get_env(): EMBEDDING_MODEL={env.get('EMBEDDING_MODEL')}")
-    print(f"  [debug] after get_env(): GOOGLE_API_KEY={'set (' + str(len(env.get('GOOGLE_API_KEY', ''))) + ' chars)' if env.get('GOOGLE_API_KEY') else 'EMPTY'}")
-    print(f"  [debug] os.environ after: EMBEDDING_PROVIDER={os.environ.get('EMBEDDING_PROVIDER', '(NOT SET)')}")
-    try:
-        from knowledgebase.config import get_config
-        _c = get_config()
-        print(f"  [debug] config singleton: provider={_c.embedding_provider}, model={_c.embedding_model}")
-    except Exception as _e:
-        print(f"  [debug] config error: {_e}")
 
     # Check .env file
     if ENV_PATH.exists():

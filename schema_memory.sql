@@ -6,9 +6,9 @@
 -- REQUIRES: pgcrypto extension for API key hashing
 -- ============================================================================
 
--- Extensions
-CREATE EXTENSION IF NOT EXISTS vector;
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
+-- Extensions (Supabase installs in the 'extensions' schema)
+CREATE EXTENSION IF NOT EXISTS vector SCHEMA extensions;
+CREATE EXTENSION IF NOT EXISTS pgcrypto SCHEMA extensions;
 
 -- ============================================================================
 -- CUSTOM TYPES
@@ -248,7 +248,7 @@ CREATE POLICY kb_chunks_agent_access ON kb_chunks
 
 -- ============================================================================
 -- RPC FUNCTIONS
--- All use SET search_path = public to prevent schema injection attacks.
+-- All use SET search_path = public, extensions to prevent schema injection attacks.
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
@@ -257,7 +257,7 @@ CREATE POLICY kb_chunks_agent_access ON kb_chunks
 CREATE OR REPLACE FUNCTION mb_authenticate_agent(p_api_key TEXT)
 RETURNS TABLE (agent_id UUID, agent_name TEXT, agent_type TEXT)
 LANGUAGE plpgsql SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 BEGIN
     RETURN QUERY
@@ -286,7 +286,7 @@ CREATE OR REPLACE FUNCTION mb_register_agent(
 )
 RETURNS UUID
 LANGUAGE plpgsql SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 DECLARE
     new_id UUID;
@@ -331,7 +331,7 @@ RETURNS TABLE (
     created_at TIMESTAMPTZ
 )
 LANGUAGE plpgsql SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 BEGIN
     RETURN QUERY
@@ -400,7 +400,7 @@ RETURNS TABLE (
     metadata JSONB
 )
 LANGUAGE plpgsql SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 BEGIN
     RETURN QUERY
@@ -495,7 +495,7 @@ $$;
 CREATE OR REPLACE FUNCTION mb_log_access(p_memory_id UUID, p_agent_id UUID)
 RETURNS VOID
 LANGUAGE plpgsql SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 BEGIN
     INSERT INTO mb_memory_access_log (memory_id, agent_id)
@@ -510,7 +510,7 @@ $$;
 CREATE OR REPLACE FUNCTION mb_aggregate_access_counts()
 RETURNS INTEGER
 LANGUAGE plpgsql SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 DECLARE
     rows_processed INTEGER;
@@ -546,7 +546,7 @@ $$;
 CREATE OR REPLACE FUNCTION mb_purge_expired()
 RETURNS INTEGER
 LANGUAGE plpgsql SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 DECLARE
     rows_deleted INTEGER;
@@ -565,7 +565,7 @@ $$;
 CREATE OR REPLACE FUNCTION mb_bootstrap_agent_access(p_agent_id UUID)
 RETURNS INTEGER
 LANGUAGE plpgsql SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 DECLARE
     rows_granted INTEGER;
@@ -593,7 +593,7 @@ RETURNS TABLE (
     teams_count BIGINT
 )
 LANGUAGE plpgsql SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 BEGIN
     RETURN QUERY

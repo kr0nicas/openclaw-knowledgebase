@@ -1,8 +1,8 @@
 -- OpenClaw Knowledgebase Schema
 -- Requires: pgvector extension
 
--- Enable pgvector
-CREATE EXTENSION IF NOT EXISTS vector;
+-- Enable pgvector (Supabase installs extensions in the 'extensions' schema)
+CREATE EXTENSION IF NOT EXISTS vector SCHEMA extensions;
 
 -- Sources table: tracks ingested URLs/documents
 CREATE TABLE IF NOT EXISTS kb_sources (
@@ -31,18 +31,17 @@ CREATE TABLE IF NOT EXISTS kb_chunks (
     UNIQUE(url, chunk_index)
 );
 
--- Index for fast vector similarity search
-CREATE INDEX IF NOT EXISTS kb_chunks_embedding_idx 
-ON kb_chunks 
-USING ivfflat (embedding vector_cosine_ops)
-WITH (lists = 100);
+-- Index for fast vector similarity search (HNSW: better recall, no rebuild needed)
+CREATE INDEX IF NOT EXISTS kb_chunks_embedding_idx
+ON kb_chunks
+USING hnsw (embedding vector_cosine_ops);
 
 -- Index for keyword search
 CREATE INDEX IF NOT EXISTS kb_chunks_content_idx 
 ON kb_chunks 
 USING gin (to_tsvector('english', content));
 
--- Semantic search function
+-- Semantic search function (ANN via HNSW index, then threshold filter)
 CREATE OR REPLACE FUNCTION kb_search_semantic(
     query_embedding vector(768),
     match_count INT DEFAULT 10,
@@ -55,25 +54,30 @@ RETURNS TABLE (
     content TEXT,
     similarity FLOAT
 )
-LANGUAGE plpgsql
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public, extensions
 AS $$
 BEGIN
     RETURN QUERY
-    SELECT 
-        c.id,
-        c.url,
-        c.title,
-        c.content,
-        1 - (c.embedding <=> query_embedding) AS similarity
-    FROM kb_chunks c
-    WHERE c.embedding IS NOT NULL
-      AND 1 - (c.embedding <=> query_embedding) > similarity_threshold
-    ORDER BY c.embedding <=> query_embedding
+    WITH candidates AS (
+        -- ORDER BY <=> LIMIT leverages HNSW index for ANN search
+        SELECT
+            c.id, c.url, c.title, c.content,
+            1 - (c.embedding <=> query_embedding) AS sim
+        FROM kb_chunks c
+        WHERE c.embedding IS NOT NULL
+        ORDER BY c.embedding <=> query_embedding
+        LIMIT match_count * 2  -- over-fetch to allow threshold filtering
+    )
+    SELECT c.id, c.url, c.title, c.content, c.sim AS similarity
+    FROM candidates c
+    WHERE c.sim > similarity_threshold
+    ORDER BY c.sim DESC
     LIMIT match_count;
 END;
 $$;
 
--- Hybrid search function (semantic + keyword)
+-- Hybrid search function (semantic ANN + keyword, then merge)
 CREATE OR REPLACE FUNCTION kb_search_hybrid(
     query_embedding vector(768),
     query_text TEXT,
@@ -89,32 +93,30 @@ RETURNS TABLE (
     keyword_score FLOAT,
     combined_score FLOAT
 )
-LANGUAGE plpgsql
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public, extensions
 AS $$
 BEGIN
     RETURN QUERY
     WITH semantic AS (
-        SELECT 
-            c.id,
-            c.url,
-            c.title,
-            c.content,
+        -- ANN search via HNSW index
+        SELECT
+            c.id, c.url, c.title, c.content,
             1 - (c.embedding <=> query_embedding) AS score
         FROM kb_chunks c
         WHERE c.embedding IS NOT NULL
+        ORDER BY c.embedding <=> query_embedding
+        LIMIT match_count * 3
     ),
     keyword AS (
-        SELECT 
+        SELECT
             c.id,
             ts_rank(to_tsvector('english', c.content), plainto_tsquery('english', query_text)) AS score
         FROM kb_chunks c
         WHERE to_tsvector('english', c.content) @@ plainto_tsquery('english', query_text)
     )
-    SELECT 
-        s.id,
-        s.url,
-        s.title,
-        s.content,
+    SELECT
+        s.id, s.url, s.title, s.content,
         s.score AS semantic_score,
         COALESCE(k.score, 0) AS keyword_score,
         (s.score * semantic_weight + COALESCE(k.score, 0) * (1 - semantic_weight)) AS combined_score
@@ -133,11 +135,12 @@ RETURNS TABLE (
     chunks_with_embeddings BIGINT,
     chunks_without_embeddings BIGINT
 )
-LANGUAGE plpgsql
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public, extensions
 AS $$
 BEGIN
     RETURN QUERY
-    SELECT 
+    SELECT
         (SELECT COUNT(*) FROM kb_sources),
         (SELECT COUNT(*) FROM kb_chunks),
         (SELECT COUNT(*) FROM kb_chunks WHERE embedding IS NOT NULL),
