@@ -7,6 +7,36 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 
+def _load_env_cascade(local_env: str | Path | None = None) -> None:
+    """Load environment variables with workspace → project cascade.
+
+    Order (later overrides earlier):
+    1. Workspace .env (parent of project root, or OPENCLAW_WORKSPACE)
+    2. Project-local .env (passed explicitly or auto-discovered)
+
+    This lets shared credentials (Supabase, API keys) live once in the
+    workspace .env while each project overrides only what it needs.
+    """
+    # Resolve workspace root
+    workspace_dir = os.getenv("OPENCLAW_WORKSPACE")
+    if workspace_dir:
+        workspace_env = Path(workspace_dir) / ".env"
+    else:
+        # Convention: workspace is the parent of the project root
+        project_root = Path(__file__).resolve().parent.parent.parent
+        workspace_env = project_root.parent / ".env"
+
+    # 1. Load workspace .env first (base layer, won't override existing)
+    if workspace_env.is_file():
+        load_dotenv(workspace_env, override=False)
+
+    # 2. Load project-local .env (overrides workspace values)
+    if local_env:
+        load_dotenv(local_env, override=True)
+    else:
+        load_dotenv(override=True)
+
+
 @dataclass
 class Config:
     """Knowledgebase configuration."""
@@ -48,10 +78,7 @@ class Config:
     @classmethod
     def from_env(cls, env_file: str | Path | None = None) -> "Config":
         """Load configuration from environment variables."""
-        if env_file:
-            load_dotenv(env_file)
-        else:
-            load_dotenv()
+        _load_env_cascade(env_file)
 
         return cls(
             supabase_url=os.getenv("SUPABASE_URL", ""),

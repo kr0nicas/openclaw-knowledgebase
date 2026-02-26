@@ -196,7 +196,20 @@ GET  /api/jobs/{id}       # Job status
 
 ## Configuration
 
-Environment variables (`.env`):
+Environment variables are loaded in cascade: **workspace `.env` first, then project `.env`** (project overrides workspace). This lets shared credentials live in one place when running multiple projects under the same workspace.
+
+```
+/root/.openclaw/workspace/
+├── .env                          ← shared: SUPABASE_URL, SUPABASE_KEY, API keys
+├── openclaw-knowledgebase/
+│   └── .env                      ← overrides: OPENCLAW_AGENT_NAME, EMBEDDING_MODEL
+├── another-project/
+│   └── .env                      ← its own overrides
+```
+
+By default the workspace is the parent directory of the project root. Override with `OPENCLAW_WORKSPACE=/custom/path`.
+
+Variables (`.env`):
 
 | Variable | Description | Default |
 |----------|-------------|---------|

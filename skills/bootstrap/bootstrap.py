@@ -31,6 +31,7 @@ for cache_dir in SRC_ROOT.rglob("__pycache__"):
 from dotenv import load_dotenv, set_key
 
 ENV_PATH = PROJECT_ROOT / ".env"
+WORKSPACE_ENV_PATH = PROJECT_ROOT.parent / ".env"
 SCHEMA_PATH = PROJECT_ROOT / "schema.sql"
 SCHEMA_MEMORY_PATH = PROJECT_ROOT / "schema_memory.sql"
 
@@ -71,6 +72,11 @@ def get_env() -> dict:
     and replaces the global Config singleton, bypassing any caching or
     double-load_dotenv issues in the library code.
     """
+    # Cascade: workspace .env (base) → project .env (overrides)
+    workspace_dir = os.getenv("OPENCLAW_WORKSPACE")
+    ws_env = Path(workspace_dir) / ".env" if workspace_dir else WORKSPACE_ENV_PATH
+    if ws_env.is_file():
+        load_dotenv(ws_env, override=False)
     load_dotenv(ENV_PATH, override=True)
 
     # Read all values from os.environ (now populated by load_dotenv)
