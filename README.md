@@ -211,12 +211,21 @@ Environment variables (`.env`):
 | `GOOGLE_API_KEY` | Google AI API key | — |
 | `OPENAI_API_KEY` | OpenAI API key | — |
 | `OPENAI_BASE_URL` | OpenAI-compatible base URL | `https://api.openai.com/v1` |
+| `LOG_LEVEL` | Logging level: DEBUG, INFO, WARNING, ERROR | `INFO` |
+| `LOG_FORMAT` | Log output: rich, json, plain | `rich` |
 | `CHUNK_SIZE` | Characters per chunk | `1000` |
 | `CHUNK_OVERLAP` | Overlap between chunks | `200` |
 | `OPENCLAW_AGENT_NAME` | Agent identity (for memory module) | Auto-generated |
 | `OPENCLAW_AGENT_KEY` | Agent API key (for memory module) | Generated on bootstrap |
 
 ## Database Schema
+
+Both schema files must be applied in order via the Supabase SQL Editor:
+
+1. `schema.sql` — RAG tables, HNSW vector index, search functions
+2. `schema_memory.sql` — Multi-agent memory tables, RLS policies, memory RPC functions
+
+Extensions (`vector`, `pgcrypto`) are created in the `extensions` schema (Supabase default). All RPC functions use `SECURITY DEFINER` and `SET search_path = public, extensions` to ensure correct function resolution and prevent search_path injection.
 
 ### RAG Tables (`kb_*`)
 
@@ -225,27 +234,39 @@ kb_sources (id, url, title, source_type, metadata, created_at)
 kb_chunks  (id, source_id, url, chunk_index, content, embedding vector(768))
 ```
 
+Vector index: **HNSW** (`vector_cosine_ops`) — better recall than ivfflat, no rebuild needed as data grows.
+
 ### Memory Tables (`mb_*`)
 
 ```sql
-mb_agents       (id, name, agent_type, api_key_hash, metadata)
-mb_memory       (id, agent_id, memory_type, scope, content, embedding, tags[], namespace, importance)
-mb_teams        (id, name, description, created_by)
-mb_team_members (team_id, agent_id, role)
-mb_kb_access    (source_id, agent_id, team_id, scope, permission)
+mb_agents            (id, name, agent_type, api_key_hash, metadata, is_active, last_seen_at)
+mb_memory            (id, agent_id, memory_type, scope, content, embedding, tags[], namespace, importance, expires_at)
+mb_teams             (id, name, description, created_by)
+mb_team_members      (team_id, agent_id, role)
+mb_kb_access         (source_id, agent_id, team_id, scope, permission)
+mb_memory_access_log (memory_id, agent_id, accessed_at)  -- append-only, aggregated via cron
 ```
 
+Row-Level Security is enabled on `mb_memory` and `kb_chunks`. Agents see their own private memories, team memories via shared teams, and all global memories.
+
 ### RPC Functions
+
+All functions use ANN search via HNSW index (CTE with `ORDER BY <=> LIMIT` before filtering) for optimal performance.
 
 | Function | Purpose |
 |----------|---------|
 | `kb_search_semantic()` | Vector similarity search on RAG chunks |
 | `kb_search_hybrid()` | Combined semantic + keyword search |
-| `mb_register_agent()` | Register a new agent |
+| `kb_stats()` | Source and chunk counts |
+| `mb_register_agent()` | Register a new agent (bcrypt key hash via pgcrypto) |
 | `mb_authenticate_agent()` | Validate agent API key |
-| `mb_search_memory()` | Search agent memories with scope filtering |
+| `mb_search_memory()` | Search agent memories with scope/type/tag filtering |
 | `mb_search_all()` | Unified search across memories + RAG |
-| `mb_bootstrap_agent_access()` | Grant agent access to all existing sources |
+| `mb_bootstrap_agent_access()` | Grant agent global access to all existing sources |
+| `mb_log_access()` | Append-only memory access log (no row locks) |
+| `mb_aggregate_access_counts()` | Batch update access_count from log (cron job) |
+| `mb_purge_expired()` | Delete memories past their expires_at |
+| `mb_agent_stats()` | Per-agent stats (memories, sources, teams) |
 
 ## Agent Bootstrap (Skill)
 
